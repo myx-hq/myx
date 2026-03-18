@@ -1,25 +1,33 @@
 # Overview
 
-This document provides a high‑level overview of **myx**, a package manager and compatibility layer for agent capabilities.  myx is designed to bridge the gap between existing agent frameworks, such as MCP, SKILL.md, OpenAI tool schemas and bespoke tooling.  Rather than replacing existing standards, myx wraps them in a consistent package format, enabling installation, inspection and re‑export to different runtimes.
+myx is a package manager and compatibility layer for agent capabilities.
+
+The MVP (v0) focuses on one deterministic loop:
+
+1. initialize or obtain a package,
+2. install with explicit policy review,
+3. inspect identity/tools/permissions,
+4. build deterministic target artifacts.
 
 ## Why myx?
 
-The modern agent ecosystem is fragmented.  Capabilities live in many formats — MCP servers, SKILL.md bundles, tool definitions in JSON, framework plugins and one‑off scripts.  Each requires different installation steps and often cannot be easily reused across systems.  This fragmentation slows innovation and makes it hard for developers to share work.
+The agent ecosystem is fragmented: capability definitions and runtime expectations vary by platform. myx provides one canonical capability contract so package authors can describe a tool once and export it to supported runtimes.
 
-myx introduces a canonical **Capability IR** (intermediate representation) that normalises disparate capability descriptions.  Using a set of **import adapters**, myx can ingest existing capability definitions into the IR.  **Export adapters** then emit runtime‑specific artifacts (e.g. OpenAI tool schemas, SKILL.md bundles or MCP server configurations).  This architecture lets developers:
+For MVP, the goal is reliability and enforcement, not maximum ecosystem coverage.
 
-- Package a capability once and reuse it across multiple runtimes.
-- Inspect the permissions and behaviour of a capability before installation.
-- Maintain reproducible installations via lockfiles and checksums.
+## What Ships in MVP
 
-## Components
+- **Rust core + CLI** with `init`, `add`, `inspect`, `build`.
+- **Capability Profile v1** with explicit `tool_class`, `execution`, and permissions.
+- **Static index + local path resolution** (no hosted registry dependency).
+- **Deterministic lockfile/install semantics** with integrity checks.
+- **Built-in export targets**: `openai`, `mcp`, `skill`.
+- **Global runtime executor** for declarative `http` and constrained `subprocess` actions.
 
-The system comprises several key pieces:
+## What Is Deferred
 
-- **Capability IR** — a canonical JSON schema that captures a capability’s identity, instructions, tools, permissions, runtime entrypoints and compatibility hints.
-- **Import Adapters** — code that converts external formats (e.g. SKILL.md folders, MCP server descriptors) into the IR.
-- **Export Adapters** — code that converts the IR into runtime‑specific artifacts (e.g. OpenAI tool definitions).
-- **CLI** — a command line tool for developers to initialise packages, inspect them, install them, build runtime artifacts and publish to a registry.
-- **Registry** — a service that hosts versioned packages, enabling search, download and publishing workflows.
+- Hosted registry and `myx publish` workflows.
+- External adapter plugin model and dynamic adapter discovery.
+- Tier-2 export targets (`vercel`, `claude`, `gemini`).
 
-The rest of the documentation delves into each of these components in more detail.
+Deferred scope is tracked in RFC 0005.
