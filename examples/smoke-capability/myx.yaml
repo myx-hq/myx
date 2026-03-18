@@ -1,0 +1,6 @@
+name: smoke
+version: 0.1.0
+description: Offline smoke capability for CI loop validation
+publisher: example
+license: Apache-2.0
+ir: ./capability.json

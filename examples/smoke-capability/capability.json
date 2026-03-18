@@ -1,0 +1,84 @@
+{
+  "schema_version": "1",
+  "identity": {
+    "name": "smoke",
+    "version": "0.1.0",
+    "publisher": "example",
+    "license": "Apache-2.0"
+  },
+  "metadata": {
+    "description": "Offline subprocess smoke capability for MVP CI loop."
+  },
+  "capabilities": [
+    "echo_text"
+  ],
+  "instructions": {
+    "system": "Echo text for smoke tests.",
+    "usage": "Call echo_text with input text."
+  },
+  "tools": [
+    {
+      "name": "echo_text",
+      "description": "Echoes the supplied text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "tool_class": "local_process",
+      "execution": {
+        "kind": "subprocess",
+        "command": "echo",
+        "args": [
+          "{{text}}"
+        ],
+        "cwd": ".",
+        "env_passthrough": [
+          "HOME"
+        ],
+        "timeout_ms": 1000
+      }
+    }
+  ],
+  "permissions": {
+    "network": [],
+    "secrets": [],
+    "filesystem": {
+      "read": [
+        "."
+      ],
+      "write": [
+        "."
+      ]
+    },
+    "subprocess": {
+      "allowed_commands": [
+        "echo"
+      ],
+      "allowed_cwds": [
+        "."
+      ],
+      "allowed_env": [
+        "HOME"
+      ],
+      "max_timeout_ms": 2000
+    }
+  },
+  "compatibility": {
+    "runtimes": [
+      "mcp",
+      "openai",
+      "skill"
+    ],
+    "platforms": [
+      "darwin",
+      "linux"
+    ]
+  }
+}

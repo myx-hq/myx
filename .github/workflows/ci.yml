@@ -25,6 +25,8 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+      - name: MVP smoke loop
+        run: ./scripts/smoke-mvp-loop.sh
       - name: Warm-cache add benchmark (non-gate)
         run: ./scripts/benchmark-warm-cache-add.sh --out ./warm-cache-add.json
       - name: Upload warm-cache benchmark artifact
