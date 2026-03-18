@@ -11,6 +11,26 @@ These rules apply to maintainers and external contributors equally:
 3. Permission enforcement must be explicit and testable.
 4. Any behavior change must include docs/spec updates in the same PR.
 
+## MVP Contract Guardrails
+
+For MVP work, `rfcs/0004-cli-contract.md` is the normative behavior contract.
+
+Required guardrails:
+
+1. No MVP behavior change without RFC delta in the same PR.
+2. If a change is out of MVP scope, move it to `rfcs/0005-post-mvp-expansion.md` instead of silently extending MVP.
+3. Implementation, schemas, and examples must be updated together when a contract changes.
+4. Every contract change must include tests for determinism, policy behavior, or artifact output.
+
+Contract checklist for behavior changes:
+
+- command/flag semantics
+- exit codes
+- JSON output shape
+- artifact paths and filenames
+- schema compatibility
+- lockfile and policy behavior
+
 ## What to Contribute
 
 - Rust core crates in `crates/`
@@ -73,6 +93,11 @@ Do not weaken policy enforcement without explicit maintainer approval and docume
   - how it was tested
   - any RFC/doc updates
 - Link related issue/RFC when available.
+
+## Agent and Automation Contributions
+
+Any AI or automation-assisted contribution must follow `AGENTS.md` in the repo root.
+If agent-generated code changes behavior without matching RFC/schema updates, the PR should not be merged.
 
 ## License
 

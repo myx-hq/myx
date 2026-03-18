@@ -13,6 +13,15 @@
 
 - [ ] Behavior-affecting changes include RFC/spec updates
 - [ ] Relevant examples/fixtures were updated
+- [ ] MVP scope remains within `rfcs/0004-cli-contract.md` (or deferred work was added to RFC 0005)
+
+## MVP Contract Checklist
+
+- [ ] Exit code contract unchanged or updated in RFC 0004
+- [ ] JSON output contract unchanged or updated in RFC 0004
+- [ ] Artifact path/file contract unchanged or updated in RFC/docs
+- [ ] Related schema(s) updated for any contract shape changes
+- [ ] Determinism/policy/artifact tests added or updated
 
 ## Security and Policy Impact
 

@@ -412,11 +412,12 @@ fn build_skill(out_dir: &Path, profile: &CapabilityProfile) -> Result<Vec<BuildI
     tools.sort_by(|a, b| a.name.cmp(&b.name));
 
     let mut loss = Vec::new();
-    let mut lines = Vec::new();
-    lines.push("# Skill Export".to_string());
-    lines.push(String::new());
-    lines.push("| Command | Description |".to_string());
-    lines.push("|---|---|".to_string());
+    let mut lines = vec![
+        "# Skill Export".to_string(),
+        String::new(),
+        "| Command | Description |".to_string(),
+        "|---|---|".to_string(),
+    ];
 
     for tool in &tools {
         if matches!(tool.execution, ToolExecution::Subprocess { .. }) {

@@ -162,8 +162,9 @@ All commands support:
 
 JSON output requirements:
 
-- Top-level object with `command`, `ok`, `timestamp`.
-- On failure: `error.code`, `error.message`, optional `error.details`.
+- Success output: top-level object with `command`, `ok`, and command-specific payload fields.
+- Failure output: top-level object with `command`, `ok`, `timestamp`, and `error`.
+- Failure error object: `error.code`, `error.message`, optional `error.details`.
 
 ## Exit Codes
 
@@ -174,6 +175,7 @@ JSON output requirements:
 - `4`: Resolution/fetch error.
 - `5`: Integrity/trust error.
 - `6`: Policy denial.
+- `7`: Required semantic mismatch during export/build.
 
 ## Lockfile Semantics
 

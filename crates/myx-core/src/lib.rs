@@ -157,18 +157,13 @@ pub struct IndexConfig {
     pub sources: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum PolicyMode {
+    #[default]
     ReviewRequired,
     Permissive,
     Strict,
-}
-
-impl Default for PolicyMode {
-    fn default() -> Self {
-        Self::ReviewRequired
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
