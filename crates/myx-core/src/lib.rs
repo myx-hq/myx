@@ -419,6 +419,13 @@ pub fn validate_package(manifest: &PackageManifest, profile: &CapabilityProfile)
                         "subprocess tools require permissions.subprocess.max_timeout_ms"
                     ));
                 }
+                if profile.permissions.filesystem.read.is_empty()
+                    && profile.permissions.filesystem.write.is_empty()
+                {
+                    return Err(anyhow!(
+                        "subprocess tools require filesystem read or write bounds"
+                    ));
+                }
             }
         }
     }
@@ -434,4 +441,83 @@ pub fn assert_supported_target(target: &str) -> Result<()> {
         target,
         SUPPORTED_TARGETS.join(", ")
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn subprocess_manifest() -> PackageManifest {
+        PackageManifest {
+            name: "sample".to_string(),
+            version: "1.0.0".to_string(),
+            description: String::new(),
+            publisher: String::new(),
+            license: String::new(),
+            ir: Some("./capability.json".to_string()),
+        }
+    }
+
+    fn subprocess_profile() -> CapabilityProfile {
+        CapabilityProfile {
+            schema_version: PROFILE_SCHEMA_VERSION.to_string(),
+            identity: Identity {
+                name: "sample".to_string(),
+                version: "1.0.0".to_string(),
+                publisher: String::new(),
+                license: String::new(),
+            },
+            metadata: Metadata::default(),
+            capabilities: vec!["test".to_string()],
+            instructions: Instructions {
+                system: "system".to_string(),
+                usage: "usage".to_string(),
+            },
+            tools: vec![ToolDefinition {
+                name: "run".to_string(),
+                description: "run local command".to_string(),
+                parameters: json!({"type":"object"}),
+                tool_class: ToolClass::LocalProcess,
+                execution: ToolExecution::Subprocess {
+                    command: "echo".to_string(),
+                    args: vec!["hello".to_string()],
+                    cwd: Some(".".to_string()),
+                    env_passthrough: vec![],
+                    timeout_ms: Some(1000),
+                },
+            }],
+            permissions: Permissions {
+                network: vec![],
+                secrets: vec![],
+                filesystem: FilesystemPermissions::default(),
+                subprocess: SubprocessPermissions {
+                    allowed_commands: vec!["echo".to_string()],
+                    allowed_cwds: vec![".".to_string()],
+                    allowed_env: vec![],
+                    max_timeout_ms: Some(2000),
+                },
+            },
+            compatibility: Compatibility {
+                runtimes: vec!["mcp".to_string()],
+                platforms: vec!["darwin".to_string()],
+            },
+        }
+    }
+
+    #[test]
+    fn subprocess_tools_require_filesystem_bounds() {
+        let manifest = subprocess_manifest();
+        let profile = subprocess_profile();
+        let err = validate_package(&manifest, &profile).expect_err("expected fs bounds error");
+        assert!(err.to_string().contains("filesystem read or write bounds"));
+    }
+
+    #[test]
+    fn subprocess_tools_accept_filesystem_bounds() {
+        let manifest = subprocess_manifest();
+        let mut profile = subprocess_profile();
+        profile.permissions.filesystem.read = vec![".".to_string()];
+        validate_package(&manifest, &profile).expect("profile should validate");
+    }
 }
