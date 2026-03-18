@@ -34,6 +34,13 @@ fn run(cli: Cli) -> Result<(), CliExit> {
             config,
             json,
         } => commands::command_build(&target, package, config, json),
+        Commands::Run {
+            target,
+            input,
+            config,
+            non_interactive,
+            json,
+        } => commands::command_run(&target, input, config, non_interactive, json),
     }
 }
 

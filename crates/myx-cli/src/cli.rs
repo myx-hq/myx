@@ -50,4 +50,19 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         json: bool,
     },
+    Run {
+        target: String,
+        #[arg(long, value_name = "JSON")]
+        input: Option<String>,
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Disable interactive policy prompts"
+        )]
+        non_interactive: bool,
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
 }

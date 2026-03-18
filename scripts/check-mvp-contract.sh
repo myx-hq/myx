@@ -45,7 +45,7 @@ require_pattern \
 
 require_pattern \
   "rfcs/0004-cli-contract.md" \
-  'Command surface is limited to `init`, `add`, `inspect`, and `build`\.' \
+  'Command surface is limited to `init`, `add`, `inspect`, `build`, and `run`\.' \
   "RFC 0004 must define MVP command surface"
 
 require_pattern \
