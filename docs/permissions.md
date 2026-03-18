@@ -67,6 +67,15 @@ In `review_required`, if package permissions exceed configured allowlists, insta
 
 If permissions exceed configured allowlists, install is denied. No prompt fallback.
 
+Non-interactive mode is detected deterministically with this precedence:
+
+1. `--non-interactive` flag.
+2. `MYX_NON_INTERACTIVE` env override (`1/0`, `true/false`, `yes/no`, `on/off`).
+3. Truthy `CI` env.
+4. Non-TTY stdio (`stdin` or `stdout` is not a terminal).
+
+If `MYX_NON_INTERACTIVE` is present with an invalid value, install fails with a validation error.
+
 ## Best Practices
 
 - Declare least privilege.

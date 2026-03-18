@@ -131,6 +131,12 @@ Default policy mode is review-required.
 ### Non-interactive / CI
 
 - Install is denied unless permissions are pre-approved by explicit allowlist configuration.
+- Non-interactive mode detection is deterministic with this precedence:
+  1. `--non-interactive` flag.
+  2. `MYX_NON_INTERACTIVE` env override (`1/0`, `true/false`, `yes/no`, `on/off`).
+  3. Truthy `CI` env.
+  4. Non-TTY stdio (`stdin` or `stdout` is not a terminal).
+- In non-interactive mode, prompts are never shown.
 
 ### Subprocess Constraints (MVP)
 
