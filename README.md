@@ -52,8 +52,8 @@ cargo run -p myx-cli -- --help
 # build MCP artifacts for a package
 cargo run -p myx-cli -- build --target mcp
 
-# validate and run generated MCP runtime config
-cargo run -p myx-runtime-executor --bin myx-mcp-wrapper -- --config .myx/mcp/runtime-config.json --healthcheck
+# run generated MCP server artifact (runtime bridge is internal)
+./.myx/mcp/run.sh --healthcheck
 ```
 
 ## Contributing

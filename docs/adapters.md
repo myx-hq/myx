@@ -36,6 +36,8 @@ Writes:
 - `launch.json`
 - `run.sh`
 
+`run.sh` is the user-facing entrypoint. The underlying runtime bridge binary is an internal detail.
+
 Generated MCP launch uses strict protocol mode:
 
 - `--protocol mcp` with `Content-Length` framed JSON-RPC over stdio.

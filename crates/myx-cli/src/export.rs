@@ -207,8 +207,8 @@ pub fn build_mcp(
     write_json(&out_dir.join("runtime-config.json"), &runtime_config)?;
 
     let launch = json!({
-        "command": "myx-mcp-wrapper",
-        "args": ["--config", "runtime-config.json", "--protocol", "mcp"],
+        "command": "./run.sh",
+        "args": [],
         "cwd": ".",
         "startup": "deterministic"
     });
@@ -217,7 +217,16 @@ pub fn build_mcp(
     let run_script = r#"#!/usr/bin/env sh
 set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-exec "${MYX_MCP_WRAPPER_BIN:-myx-mcp-wrapper}" --config "$SCRIPT_DIR/runtime-config.json" --protocol mcp
+RUNNER_BIN="${MYX_MCP_RUNNER_BIN:-myx-mcp-runner}"
+if command -v "$RUNNER_BIN" >/dev/null 2>&1; then
+  exec "$RUNNER_BIN" --config "$SCRIPT_DIR/runtime-config.json" --protocol mcp "$@"
+fi
+DEV_RUNNER="$SCRIPT_DIR/../../target/debug/myx-mcp-runner"
+if [ -x "$DEV_RUNNER" ]; then
+  exec "$DEV_RUNNER" --config "$SCRIPT_DIR/runtime-config.json" --protocol mcp "$@"
+fi
+echo "myx MCP runtime bridge not found; install myx or set MYX_MCP_RUNNER_BIN" >&2
+exit 127
 "#;
     let run_path = out_dir.join("run.sh");
     std::fs::write(&run_path, run_script)?;
@@ -335,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn build_mcp_writes_wrapper_assets() {
+    fn build_mcp_writes_runtime_assets() {
         let profile = sample_profile(vec![http_tool("get_repo")]);
         let tmp = TempDir::new().expect("tempdir");
         build_mcp(tmp.path(), tmp.path(), &profile).expect("build mcp");
@@ -356,10 +365,8 @@ mod tests {
             &std::fs::read_to_string(tmp.path().join("launch.json")).expect("read launch"),
         )
         .expect("parse launch");
-        assert_eq!(
-            launch["args"],
-            serde_json::json!(["--config", "runtime-config.json", "--protocol", "mcp"])
-        );
+        assert_eq!(launch["command"], "./run.sh");
+        assert_eq!(launch["args"], serde_json::json!([]));
     }
 
     #[test]
