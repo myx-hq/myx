@@ -48,6 +48,10 @@ myx/
 cargo run -p myx-cli -- --help
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development rules, required checks, and PR expectations.
+
 ## License
 
 This project is licensed under **GNU AGPL v3.0** (`AGPL-3.0-only`).
