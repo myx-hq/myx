@@ -25,18 +25,21 @@ For each installed package:
 
 ```json
 {
-  "version": 1,
-  "packages": {
-    "github": {
+  "lockfile_version": 1,
+  "packages": [
+    {
+      "name": "github",
       "version": "0.1.0",
-      "resolved": "https://index.example/github-0.1.0.tar.gz",
+      "source": "/abs/path/to/github-0.1.0",
       "digest": "sha256:abc123",
       "permissions_snapshot": {
         "network": ["api.github.com"],
-        "subprocess": ["git"]
+        "subprocess": {
+          "allowed_commands": ["git"]
+        }
       }
     }
-  }
+  ]
 }
 ```
 
@@ -47,9 +50,35 @@ For each installed package:
 - no mutation on failed install
 - failed `add` leaves previous lockfile unchanged
 - digest must match fetched artifact
+- canonical v1 output uses `lockfile_version` + array `packages` entries sorted by `(name, version)`
+
+## Migration
+
+Legacy lockfiles with this historical shape are accepted for read-time migration:
+
+```json
+{
+  "version": 1,
+  "packages": {
+    "github": {
+      "version": "0.1.0",
+      "resolved": "/abs/path/to/github-0.1.0",
+      "digest": "sha256:abc123",
+      "permissions_snapshot": {}
+    }
+  }
+}
+```
+
+Migration behavior:
+
+- loader converts legacy map entries to canonical array entries
+- `resolved` maps to canonical `source`
+- migrated in-memory entries are deterministically sorted by `(name, version)`
+- writes always emit canonical v1 shape
 
 ## Failure Modes
 
-- `E_LOCK_WRITE`
-- `E_LOCK_ATOMICITY`
-- `E_DIGEST_MISMATCH`
+- lockfile write failure
+- atomic rename failure
+- parse failure for unknown lockfile shape
