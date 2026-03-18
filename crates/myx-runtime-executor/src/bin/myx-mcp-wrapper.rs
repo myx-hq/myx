@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
-use myx_runtime_executor::{execute_tool_call, load_runtime_config, validate_runtime_config};
+use myx_runtime_executor::{
+    execute_tool_call, load_runtime_config, validate_runtime_config, RuntimeConfig,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -47,7 +49,7 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
     let config = load_runtime_config(&cli.config)?;
-    let base_dir = config_base_dir(&cli.config);
+    let base_dir = config_base_dir(&cli.config, &config);
     validate_runtime_config(&config, &base_dir)?;
 
     if cli.healthcheck {
@@ -83,10 +85,15 @@ fn run() -> Result<()> {
     serve_loop(&config, &base_dir)
 }
 
-fn config_base_dir(path: &Path) -> PathBuf {
-    path.parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf()
+fn config_base_dir(path: &Path, config: &RuntimeConfig) -> PathBuf {
+    let config_dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let requested = config.base_dir.as_deref().unwrap_or(".");
+    let requested_path = Path::new(requested);
+    if requested_path.is_absolute() {
+        requested_path.to_path_buf()
+    } else {
+        config_dir.join(requested_path)
+    }
 }
 
 fn serve_loop(config: &myx_runtime_executor::RuntimeConfig, base_dir: &Path) -> Result<()> {

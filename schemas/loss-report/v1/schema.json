@@ -3,18 +3,29 @@
   "$id": "https://myx.sh/schemas/loss-report/v1/schema.json",
   "title": "myx Loss Report v1",
   "type": "object",
-  "required": ["target", "issues"],
+  "required": ["target", "issues", "summary"],
   "properties": {
     "target": { "type": "string" },
     "issues": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["level", "message"],
+        "required": ["level", "category", "message", "required_mismatch"],
         "properties": {
           "level": { "type": "string", "enum": ["warning", "error"] },
-          "message": { "type": "string" }
+          "category": { "type": "string" },
+          "tool": { "type": ["string", "null"] },
+          "message": { "type": "string" },
+          "required_mismatch": { "type": "boolean" }
         }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "required_mismatches"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "required_mismatches": { "type": "integer", "minimum": 0 }
       }
     }
   }

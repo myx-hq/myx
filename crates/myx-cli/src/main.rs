@@ -6,7 +6,7 @@ use myx_core::{
     assert_supported_target, load_config, load_package_bundle, CapabilityProfile, PackageManifest,
     ResolvedPackage, ToolClass, ToolDefinition, ToolExecution,
 };
-use myx_lockfile::{load_lock, sha256_hex, upsert_entry, write_lock_atomic, LockEntry};
+use myx_lockfile::{load_lock, upsert_entry, write_lock_atomic, LockEntry};
 use myx_policy::{evaluate_install_policy, Decision};
 use serde_json::json;
 
@@ -252,8 +252,15 @@ fn command_add(
         myx_runtime_executor::validate_execution(&tool.execution).map_err(|e| fail(3, e))?;
     }
 
-    let profile_bytes = std::fs::read(&bundle.profile_path).map_err(|e| fail(1, e))?;
-    let actual_digest = sha256_hex(&profile_bytes);
+    let actual_digest = myx_store::compute_package_digest(&bundle.package_dir).map_err(|e| {
+        fail(
+            1,
+            format!(
+                "failed to compute package digest for '{}': {e}",
+                bundle.package_dir.display()
+            ),
+        )
+    })?;
     if let Some(expected) = &resolved.expected_digest {
         if parse_expected_digest(expected) != actual_digest {
             return Err(fail(
@@ -437,7 +444,49 @@ fn build_skill(out_dir: &Path, profile: &CapabilityProfile) -> Result<Vec<BuildI
     Ok(loss)
 }
 
-fn build_mcp(out_dir: &Path, profile: &CapabilityProfile) -> Result<Vec<BuildIssue>> {
+fn relative_path_or_absolute(base: &Path, target: &Path) -> PathBuf {
+    let base_abs = match std::fs::canonicalize(base) {
+        Ok(p) => p,
+        Err(_) => return target.to_path_buf(),
+    };
+    let target_abs = match std::fs::canonicalize(target) {
+        Ok(p) => p,
+        Err(_) => return target.to_path_buf(),
+    };
+
+    let base_components = base_abs.components().collect::<Vec<_>>();
+    let target_components = target_abs.components().collect::<Vec<_>>();
+
+    let mut common_len = 0usize;
+    while common_len < base_components.len()
+        && common_len < target_components.len()
+        && base_components[common_len] == target_components[common_len]
+    {
+        common_len += 1;
+    }
+
+    if common_len == 0 {
+        return target.to_path_buf();
+    }
+
+    let mut rel = PathBuf::new();
+    for _ in common_len..base_components.len() {
+        rel.push("..");
+    }
+    for component in target_components.iter().skip(common_len) {
+        rel.push(component.as_os_str());
+    }
+    if rel.as_os_str().is_empty() {
+        rel.push(".");
+    }
+    rel
+}
+
+fn build_mcp(
+    out_dir: &Path,
+    package_dir: &Path,
+    profile: &CapabilityProfile,
+) -> Result<Vec<BuildIssue>> {
     let mut tools = profile.tools.clone();
     tools.sort_by(|a, b| a.name.cmp(&b.name));
     let tool_values = tools
@@ -468,6 +517,7 @@ fn build_mcp(out_dir: &Path, profile: &CapabilityProfile) -> Result<Vec<BuildIss
     let runtime_config = json!({
         "schema_version": 1,
         "identity": profile.identity,
+        "base_dir": relative_path_or_absolute(out_dir, package_dir).display().to_string(),
         "permissions": profile.permissions,
         "executor": {
             "kind": "myx_global_executor"
@@ -529,7 +579,7 @@ fn command_build(
     let loss = match target {
         "openai" => build_openai(&out_dir, &bundle.profile),
         "skill" => build_skill(&out_dir, &bundle.profile),
-        "mcp" => build_mcp(&out_dir, &bundle.profile),
+        "mcp" => build_mcp(&out_dir, &bundle.package_dir, &bundle.profile),
         _ => Err(anyhow::anyhow!("unsupported target '{}'", target)),
     }
     .map_err(|e| fail(1, e))?;
@@ -737,12 +787,19 @@ mod tests {
     fn build_mcp_writes_wrapper_assets() {
         let profile = sample_profile(vec![http_tool("get_repo")]);
         let tmp = TempDir::new().expect("tempdir");
-        build_mcp(tmp.path(), &profile).expect("build mcp");
+        build_mcp(tmp.path(), tmp.path(), &profile).expect("build mcp");
 
         assert!(tmp.path().join("server.json").exists());
         assert!(tmp.path().join("runtime-config.json").exists());
         assert!(tmp.path().join("launch.json").exists());
         assert!(tmp.path().join("run.sh").exists());
+
+        let runtime_config: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(tmp.path().join("runtime-config.json"))
+                .expect("read runtime config"),
+        )
+        .expect("parse runtime config");
+        assert_eq!(runtime_config["base_dir"], ".");
     }
 
     #[test]
