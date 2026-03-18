@@ -40,7 +40,7 @@
 - [x] Runtime executor tests
 - [x] Golden export tests
 - [x] MCP runnable check
-- [ ] Warm-cache benchmark tracked
+- [x] Warm-cache benchmark tracked
 
 ## Ship Gate
 

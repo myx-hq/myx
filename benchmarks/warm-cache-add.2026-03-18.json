@@ -1,0 +1,8 @@
+{
+  "benchmark": "warm-cache-myx-add",
+  "package": "examples/github-capability",
+  "cold_ms": 49,
+  "warm_ms": 35,
+  "timestamp_utc": "2026-03-18T20:14:01Z",
+  "environment": "local-macos"
+}
