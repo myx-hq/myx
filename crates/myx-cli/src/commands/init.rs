@@ -4,7 +4,7 @@ use anyhow::Result;
 use myx_core::{CapabilityProfile, PackageManifest, ToolClass, ToolDefinition, ToolExecution};
 use serde_json::json;
 
-pub fn command_init(path: Option<PathBuf>, force: bool) -> Result<()> {
+pub fn command_init(path: Option<PathBuf>, force: bool, json_output: bool) -> Result<()> {
     let target = path.unwrap_or_else(|| PathBuf::from("."));
     std::fs::create_dir_all(&target)?;
 
@@ -99,6 +99,18 @@ pub fn command_init(path: Option<PathBuf>, force: bool) -> Result<()> {
 
     std::fs::write(&manifest_path, serde_yaml::to_string(&manifest)?)?;
     std::fs::write(&profile_path, serde_json::to_vec_pretty(&profile)?)?;
-    println!("initialized package scaffold in {}", target.display());
+
+    if json_output {
+        let out = json!({
+            "command": "init",
+            "ok": true,
+            "path": target.display().to_string(),
+            "manifest_path": manifest_path.display().to_string(),
+            "profile_path": profile_path.display().to_string()
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else {
+        println!("initialized package scaffold in {}", target.display());
+    }
     Ok(())
 }

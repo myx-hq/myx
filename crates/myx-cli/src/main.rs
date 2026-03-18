@@ -14,8 +14,8 @@ use crate::util::chrono_like_timestamp;
 
 fn run(cli: Cli) -> Result<(), CliExit> {
     match cli.command {
-        Commands::Init { path, force } => {
-            commands::command_init(path, force).map_err(|e| fail(3, e))
+        Commands::Init { path, force, json } => {
+            commands::command_init(path, force, json).map_err(|e| fail(3, e))
         }
         Commands::Add {
             package,

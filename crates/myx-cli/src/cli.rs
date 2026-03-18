@@ -17,6 +17,8 @@ pub enum Commands {
         path: Option<PathBuf>,
         #[arg(long, default_value_t = false)]
         force: bool,
+        #[arg(long, default_value_t = false)]
+        json: bool,
     },
     Add {
         package: String,
