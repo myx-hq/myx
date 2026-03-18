@@ -150,8 +150,11 @@ For `execution.kind = subprocess`, executor enforcement must include:
 - Exact command allowlist.
 - Explicit cwd rules.
 - Explicit env passthrough allowlist.
+- Filesystem bounds enforcement using declared read/write paths.
 - Required timeout.
 - Direct exec only (no shell invocation, no shell expansion).
+
+For MVP package validation, subprocess-capable packages must declare at least one filesystem bound (`permissions.filesystem.read` or `permissions.filesystem.write`).
 
 ## Configuration Resolution
 

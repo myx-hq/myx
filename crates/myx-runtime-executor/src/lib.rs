@@ -184,6 +184,13 @@ fn validate_tool_permissions(
                     resolved_cwd.display()
                 );
             }
+            if !cwd_within_filesystem_bounds(base_dir, &resolved_cwd, permissions) {
+                anyhow::bail!(
+                    "tool '{}' cwd '{}' is outside permissions.filesystem bounds",
+                    tool.name,
+                    resolved_cwd.display()
+                );
+            }
 
             for env_key in env_passthrough {
                 if !contains_or_wildcard(&permissions.subprocess.allowed_env, env_key) {
@@ -353,6 +360,12 @@ fn execute_subprocess(
     ) {
         anyhow::bail!(
             "subprocess cwd '{}' not allowed by permissions.subprocess.allowed_cwds",
+            resolved_cwd.display()
+        );
+    }
+    if !cwd_within_filesystem_bounds(base_dir, &resolved_cwd, permissions) {
+        anyhow::bail!(
+            "subprocess cwd '{}' is outside permissions.filesystem bounds",
             resolved_cwd.display()
         );
     }
@@ -540,6 +553,28 @@ fn cwd_is_allowed(base_dir: &Path, requested: &Path, allowed_cwds: &[String]) ->
     })
 }
 
+fn cwd_within_filesystem_bounds(
+    base_dir: &Path,
+    requested: &Path,
+    permissions: &Permissions,
+) -> bool {
+    path_is_within_allowlist(base_dir, requested, &permissions.filesystem.read)
+        || path_is_within_allowlist(base_dir, requested, &permissions.filesystem.write)
+}
+
+fn path_is_within_allowlist(base_dir: &Path, requested: &Path, allowlist: &[String]) -> bool {
+    if allowlist.iter().any(|a| a == "*") {
+        return true;
+    }
+
+    let requested_norm = normalize_path(requested);
+    allowlist.iter().any(|entry| {
+        let allowed_path = resolve_cwd(base_dir, Some(entry));
+        let allowed_norm = normalize_path(&allowed_path);
+        requested_norm == allowed_norm || requested_norm.starts_with(&allowed_norm)
+    })
+}
+
 fn normalize_path(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
@@ -557,7 +592,10 @@ mod tests {
         Permissions {
             network: vec!["127.0.0.1".to_string()],
             secrets: Vec::new(),
-            filesystem: FilesystemPermissions::default(),
+            filesystem: FilesystemPermissions {
+                read: vec![".".to_string()],
+                write: vec![".".to_string()],
+            },
             subprocess: SubprocessPermissions {
                 allowed_commands: vec!["echo".to_string()],
                 allowed_cwds: vec![".".to_string()],
@@ -612,6 +650,23 @@ mod tests {
         )
         .expect_err("expected allowlist failure");
         assert!(err.to_string().contains("allowed_commands"));
+    }
+
+    #[test]
+    fn subprocess_rejects_cwd_outside_filesystem_bounds() {
+        let tmp = TempDir::new().expect("tempdir");
+        let mut permissions = test_permissions();
+        permissions.filesystem.read = vec!["./allowed".to_string()];
+        permissions.filesystem.write = vec!["./allowed".to_string()];
+
+        let err = execute_tool(
+            &subprocess_tool(),
+            &permissions,
+            tmp.path(),
+            &serde_json::json!({"message":"hello"}),
+        )
+        .expect_err("expected filesystem bounds failure");
+        assert!(err.to_string().contains("filesystem bounds"));
     }
 
     #[test]

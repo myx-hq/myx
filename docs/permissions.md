@@ -48,6 +48,7 @@ MVP requires strict execution constraints:
 - exact command allowlist
 - explicit cwd allowlist
 - explicit env passthrough allowlist
+- cwd must fall within declared filesystem read/write bounds
 - required timeout
 - direct exec only (no shell invocation, no shell expansion)
 
