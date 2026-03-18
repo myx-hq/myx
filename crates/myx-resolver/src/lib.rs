@@ -164,3 +164,121 @@ pub fn resolve(spec: &str, config: &MyxConfig, cwd: &Path) -> Result<ResolvedPac
         expected_digest: Some(selected.3),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use myx_core::MyxConfig;
+    use tempfile::TempDir;
+
+    fn write_package_dir(root: &Path, name: &str, version: &str) -> PathBuf {
+        let dir = root.join(format!("{name}-{version}"));
+        std::fs::create_dir_all(&dir).expect("create package dir");
+        std::fs::write(
+            dir.join("myx.yaml"),
+            format!(
+                "name: {name}\nversion: {version}\ndescription: test\npublisher: test\nlicense: Apache-2.0\nir: ./capability.json\n"
+            ),
+        )
+        .expect("write manifest");
+        std::fs::write(
+            dir.join("capability.json"),
+            r#"{
+  "schema_version": "1",
+  "identity": {"name":"github","version":"0.0.0","publisher":"test","license":"Apache-2.0"},
+  "instructions": {"system":"x","usage":"y"},
+  "tools": [
+    {
+      "name":"http_tool",
+      "description":"d",
+      "parameters":{"type":"object"},
+      "tool_class":"http_api",
+      "execution":{"kind":"http","method":"GET","url":"https://example.com","timeout_ms":1000}
+    }
+  ],
+  "permissions": {"network":["example.com"],"secrets":[],"filesystem":{"read":[],"write":[]},"subprocess":{"allowed_commands":[],"allowed_cwds":[],"allowed_env":[],"max_timeout_ms":null}},
+  "compatibility": {"runtimes":["openai","mcp","skill"],"platforms":["darwin"]}
+}"#,
+        )
+        .expect("write profile");
+        dir
+    }
+
+    #[test]
+    fn resolve_prefers_local_path() {
+        let tmp = TempDir::new().expect("tempdir");
+        let pkg_dir = write_package_dir(tmp.path(), "github", "1.2.3");
+        let cfg = MyxConfig::default();
+
+        let resolved = resolve(pkg_dir.to_str().expect("utf8 path"), &cfg, tmp.path())
+            .expect("resolve local path");
+        assert_eq!(resolved.name, "github");
+        assert_eq!(resolved.version, "1.2.3");
+        assert_eq!(resolved.source, pkg_dir);
+        assert!(resolved.expected_digest.is_none());
+    }
+
+    #[test]
+    fn resolve_selects_highest_semver_from_index() {
+        let tmp = TempDir::new().expect("tempdir");
+        let v1 = write_package_dir(tmp.path(), "github", "1.0.0");
+        let v2 = write_package_dir(tmp.path(), "github", "2.1.0");
+        let index_path = tmp.path().join("index.json");
+        std::fs::write(
+            &index_path,
+            format!(
+                r#"{{
+  "packages": [
+    {{"name":"github","version":"1.0.0","source":"{}","digest":"sha256:111"}},
+    {{"name":"github","version":"2.1.0","source":"{}","digest":"sha256:222"}}
+  ]
+}}"#,
+                v1.display(),
+                v2.display()
+            ),
+        )
+        .expect("write index");
+
+        let mut cfg = MyxConfig::default();
+        cfg.index
+            .sources
+            .push(index_path.to_str().expect("utf8 path").to_string());
+
+        let resolved = resolve("github", &cfg, tmp.path()).expect("resolve from index");
+        assert_eq!(resolved.version, "2.1.0");
+        assert_eq!(resolved.source, v2);
+        assert_eq!(resolved.expected_digest.as_deref(), Some("sha256:222"));
+    }
+
+    #[test]
+    fn resolve_respects_explicit_version() {
+        let tmp = TempDir::new().expect("tempdir");
+        let v1 = write_package_dir(tmp.path(), "github", "1.0.0");
+        let v2 = write_package_dir(tmp.path(), "github", "2.1.0");
+        let index_path = tmp.path().join("index.json");
+        std::fs::write(
+            &index_path,
+            format!(
+                r#"{{
+  "packages": [
+    {{"name":"github","version":"1.0.0","source":"{}","digest":"sha256:111"}},
+    {{"name":"github","version":"2.1.0","source":"{}","digest":"sha256:222"}}
+  ]
+}}"#,
+                v1.display(),
+                v2.display()
+            ),
+        )
+        .expect("write index");
+
+        let mut cfg = MyxConfig::default();
+        cfg.index
+            .sources
+            .push(index_path.to_str().expect("utf8 path").to_string());
+
+        let resolved = resolve("github@1.0.0", &cfg, tmp.path()).expect("resolve versioned");
+        assert_eq!(resolved.version, "1.0.0");
+        assert_eq!(resolved.source, v1);
+        assert_eq!(resolved.expected_digest.as_deref(), Some("sha256:111"));
+    }
+}

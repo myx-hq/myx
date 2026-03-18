@@ -20,3 +20,6 @@ myx-runtime-executor = { path = "../myx-runtime-executor" }
 myx-store = { path = "../myx-store" }
 serde_json.workspace = true
 serde_yaml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -70,3 +70,66 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     let out = hasher.finalize();
     format!("{out:x}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn entry(name: &str, version: &str) -> LockEntry {
+        LockEntry {
+            name: name.to_string(),
+            version: version.to_string(),
+            source: format!("/tmp/{name}/{version}"),
+            digest: format!("sha256:{name}{version}"),
+            permissions_snapshot: serde_json::json!({"network":["api.example.com"]}),
+        }
+    }
+
+    #[test]
+    fn upsert_keeps_deterministic_order() {
+        let mut lock = MyxLock::default();
+        upsert_entry(&mut lock, entry("zeta", "1.0.0"));
+        upsert_entry(&mut lock, entry("alpha", "2.0.0"));
+        upsert_entry(&mut lock, entry("alpha", "1.0.0"));
+
+        let keys = lock
+            .packages
+            .iter()
+            .map(|p| format!("{}@{}", p.name, p.version))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            vec![
+                "alpha@1.0.0".to_string(),
+                "alpha@2.0.0".to_string(),
+                "zeta@1.0.0".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn write_and_load_round_trip() {
+        let tmp = TempDir::new().expect("tempdir");
+        let path = tmp.path().join("myx.lock");
+
+        let mut lock = MyxLock::default();
+        upsert_entry(&mut lock, entry("github", "1.2.3"));
+        write_lock_atomic(&path, &lock).expect("write lock");
+
+        let loaded = load_lock(&path).expect("load lock");
+        assert_eq!(loaded.lockfile_version, 1);
+        assert_eq!(loaded.packages.len(), 1);
+        assert_eq!(loaded.packages[0].name, "github");
+        assert_eq!(loaded.packages[0].version, "1.2.3");
+    }
+
+    #[test]
+    fn sha256_is_stable() {
+        let digest = sha256_hex(b"hello");
+        assert_eq!(
+            digest,
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+    }
+}

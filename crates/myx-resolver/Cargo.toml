@@ -12,3 +12,6 @@ serde_json.workspace = true
 myx-core = { path = "../myx-core" }
 ureq.workspace = true
 url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

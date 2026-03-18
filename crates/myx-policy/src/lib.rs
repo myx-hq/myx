@@ -120,3 +120,79 @@ pub fn evaluate_install_policy(
         reason: "interactive approval denied".to_string(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use myx_core::{
+        FilesystemPermissions, Permissions, PolicyConfig, PolicyMode, SubprocessPermissions,
+    };
+
+    fn sample_permissions() -> Permissions {
+        Permissions {
+            network: vec!["api.github.com".to_string()],
+            secrets: vec!["GITHUB_TOKEN".to_string()],
+            filesystem: FilesystemPermissions {
+                read: vec!["./repo".to_string()],
+                write: vec!["./repo".to_string()],
+            },
+            subprocess: SubprocessPermissions {
+                allowed_commands: vec!["git".to_string()],
+                allowed_cwds: vec![".".to_string()],
+                allowed_env: vec!["HOME".to_string()],
+                max_timeout_ms: Some(2000),
+            },
+        }
+    }
+
+    #[test]
+    fn permissive_mode_allows_missing_permissions() {
+        let policy = PolicyConfig {
+            mode: PolicyMode::Permissive,
+            ..PolicyConfig::default()
+        };
+        let result =
+            evaluate_install_policy(&policy, &sample_permissions(), true).expect("policy eval");
+        assert!(matches!(result.decision, Decision::Allow));
+    }
+
+    #[test]
+    fn strict_mode_denies_when_not_allowlisted() {
+        let policy = PolicyConfig {
+            mode: PolicyMode::Strict,
+            ..PolicyConfig::default()
+        };
+        let result =
+            evaluate_install_policy(&policy, &sample_permissions(), true).expect("policy eval");
+        assert!(matches!(result.decision, Decision::Deny));
+        assert!(result.reason.contains("permissions denied by policy"));
+    }
+
+    #[test]
+    fn strict_mode_allows_when_fully_allowlisted() {
+        let policy = PolicyConfig {
+            mode: PolicyMode::Strict,
+            allow_network: vec!["api.github.com".to_string()],
+            allow_secrets: vec!["GITHUB_TOKEN".to_string()],
+            allow_filesystem_read: vec!["./repo".to_string()],
+            allow_filesystem_write: vec!["./repo".to_string()],
+            allow_subprocess_commands: vec!["git".to_string()],
+            allow_subprocess_cwds: vec![".".to_string()],
+            allow_subprocess_env: vec!["HOME".to_string()],
+        };
+        let result =
+            evaluate_install_policy(&policy, &sample_permissions(), true).expect("policy eval");
+        assert!(matches!(result.decision, Decision::Allow));
+    }
+
+    #[test]
+    fn review_required_non_interactive_denies_missing_permissions() {
+        let policy = PolicyConfig {
+            mode: PolicyMode::ReviewRequired,
+            ..PolicyConfig::default()
+        };
+        let result =
+            evaluate_install_policy(&policy, &sample_permissions(), true).expect("policy eval");
+        assert!(matches!(result.decision, Decision::Deny));
+    }
+}
