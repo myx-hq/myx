@@ -245,7 +245,16 @@ exit 127
 mod tests {
     use super::*;
     use myx_core::{ToolClass, ToolDefinition};
+    use std::path::Path;
     use tempfile::TempDir;
+
+    fn assert_same_files(a: &Path, b: &Path, files: &[&str]) {
+        for file in files {
+            let left = std::fs::read(a.join(file)).expect("read left output");
+            let right = std::fs::read(b.join(file)).expect("read right output");
+            assert_eq!(left, right, "mismatch for output file '{}'", file);
+        }
+    }
 
     fn sample_profile(tools: Vec<ToolDefinition>) -> CapabilityProfile {
         CapabilityProfile {
@@ -378,5 +387,47 @@ mod tests {
         let report = loss_report_json("openai", &issues);
         assert_eq!(report["summary"]["total"], 2);
         assert_eq!(report["summary"]["required_mismatches"], 2);
+    }
+
+    #[test]
+    fn tier1_exports_are_deterministic() {
+        let profile = sample_profile(vec![http_tool("z_tool"), http_tool("a_tool")]);
+        let tmp = TempDir::new().expect("tempdir");
+
+        let openai_a = tmp.path().join("openai-a");
+        let openai_b = tmp.path().join("openai-b");
+        std::fs::create_dir_all(&openai_a).expect("openai-a dir");
+        std::fs::create_dir_all(&openai_b).expect("openai-b dir");
+        let issues_a = build_openai(&openai_a, &profile).expect("build openai a");
+        let issues_b = build_openai(&openai_b, &profile).expect("build openai b");
+        assert_eq!(issues_a.len(), issues_b.len());
+        assert_same_files(&openai_a, &openai_b, &["tools.json", "instructions.md"]);
+
+        let skill_a = tmp.path().join("skill-a");
+        let skill_b = tmp.path().join("skill-b");
+        std::fs::create_dir_all(&skill_a).expect("skill-a dir");
+        std::fs::create_dir_all(&skill_b).expect("skill-b dir");
+        let issues_a = build_skill(&skill_a, &profile).expect("build skill a");
+        let issues_b = build_skill(&skill_b, &profile).expect("build skill b");
+        assert_eq!(issues_a.len(), issues_b.len());
+        assert_same_files(&skill_a, &skill_b, &["SKILL.md"]);
+
+        let mcp_a = tmp.path().join("mcp-a");
+        let mcp_b = tmp.path().join("mcp-b");
+        std::fs::create_dir_all(&mcp_a).expect("mcp-a dir");
+        std::fs::create_dir_all(&mcp_b).expect("mcp-b dir");
+        let issues_a = build_mcp(&mcp_a, tmp.path(), &profile).expect("build mcp a");
+        let issues_b = build_mcp(&mcp_b, tmp.path(), &profile).expect("build mcp b");
+        assert_eq!(issues_a.len(), issues_b.len());
+        assert_same_files(
+            &mcp_a,
+            &mcp_b,
+            &[
+                "server.json",
+                "runtime-config.json",
+                "launch.json",
+                "run.sh",
+            ],
+        );
     }
 }
