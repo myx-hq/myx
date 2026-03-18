@@ -1,0 +1,1 @@
+You can use the GitHub capability to search repositories and manage pull requests.  Always respect the declared permissions and consult the API documentation when necessary.

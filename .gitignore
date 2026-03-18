@@ -1,0 +1,23 @@
+# Ignore node modules and build outputs
+node_modules/
+dist/
+target/
+
+# Ignore build artefacts and caches
+.myx/
+.env
+.venv
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore Python caches (if used in future)
+__pycache__/
+*.py[cod]
+
+# Ignore logs
+*.log
+
+# Ignore Jupyter notebooks checkpoints
+.ipynb_checkpoints/

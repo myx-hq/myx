@@ -1,0 +1,16 @@
+name: github
+version: 0.1.0
+description: GitHub capability bundle for myx example
+publisher: example
+license: MIT
+ir: ./capability.json
+
+sources:
+  prompts:
+    system: ./prompts/system.md
+  tools:
+    search_repositories: ./tools/schema.json
+
+adapters:
+  prebuilt:
+    - skill

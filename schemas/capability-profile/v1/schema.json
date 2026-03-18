@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://myx.sh/schemas/capability-profile/v1/schema.json",
+  "title": "Capability Profile v1",
+  "type": "object",
+  "required": ["schema_version", "identity", "tools"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1" },
+    "identity": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "tool_class", "execution"],
+        "properties": {
+          "name": { "type": "string" },
+          "tool_class": {
+            "type": "string",
+            "enum": ["http_api", "local_process", "filesystem_assisted", "composite"]
+          },
+          "execution": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": { "type": "string", "enum": ["http", "subprocess"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

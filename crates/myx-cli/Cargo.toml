@@ -1,0 +1,17 @@
+[package]
+name = "myx-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "myx"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+myx-core = { path = "../myx-core" }
+myx-resolver = { path = "../myx-resolver" }
+myx-store = { path = "../myx-store" }

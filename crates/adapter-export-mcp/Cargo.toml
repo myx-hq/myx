@@ -1,0 +1,9 @@
+[package]
+name = "adapter-export-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+myx-core = { path = "../myx-core" }

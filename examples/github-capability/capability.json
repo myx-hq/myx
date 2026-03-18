@@ -1,0 +1,61 @@
+{
+  "schema_version": "0.1",
+  "identity": {
+    "name": "github",
+    "version": "0.1.0",
+    "publisher": "example",
+    "license": "MIT"
+  },
+  "metadata": {
+    "description": "GitHub capability bundle for myx example."
+  },
+  "capabilities": [
+    "search_repositories"
+  ],
+  "instructions": {
+    "system": "Use the GitHub capability to search repositories when the user asks about code, repos, or maintainers.",
+    "usage": "Call search_repositories with a focused query and summarize key repository metadata."
+  },
+  "tools": [
+    {
+      "name": "search_repositories",
+      "description": "Search GitHub repositories by query text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search term for repository queries."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  ],
+  "permissions": {
+    "network": [
+      "api.github.com"
+    ],
+    "secrets": [
+      "GITHUB_TOKEN"
+    ],
+    "filesystem": [],
+    "subprocess": false
+  },
+  "runtime": {
+    "entrypoints": {}
+  },
+  "compatibility": {
+    "runtimes": [
+      "openai",
+      "skillmd",
+      "mcp"
+    ],
+    "platforms": [
+      "darwin",
+      "linux"
+    ]
+  }
+}

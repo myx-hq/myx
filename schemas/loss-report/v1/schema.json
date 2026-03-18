@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://myx.sh/schemas/loss-report/v1/schema.json",
+  "title": "myx Loss Report v1",
+  "type": "object",
+  "required": ["target", "issues"],
+  "properties": {
+    "target": { "type": "string" },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "message"],
+        "properties": {
+          "level": { "type": "string", "enum": ["warning", "error"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

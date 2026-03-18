@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://myx.sh/schemas/index/v1/schema.json",
+  "title": "myx Static Index v1",
+  "type": "object",
+  "required": ["packages"],
+  "properties": {
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "version", "source", "digest"],
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "source": { "type": "string" },
+          "digest": { "type": "string" }
+        }
+      }
+    }
+  }
+}
