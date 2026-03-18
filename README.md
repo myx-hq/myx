@@ -11,7 +11,7 @@
 
 ## Status
 
-Early MVP implementation has started as a Rust monorepo. Specs and RFCs remain the source of truth while core crates are scaffolded for `init/add/inspect/build`.
+Early MVP implementation has started as a Rust monorepo. Specs and RFCs remain the source of truth while core crates are scaffolded for `init/add/inspect/build/run`.
 Repository and org mapping guidance lives in `docs/repository-structure.md`.
 
 ## Rust Monorepo Layout

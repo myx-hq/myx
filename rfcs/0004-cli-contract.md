@@ -7,7 +7,7 @@
 This RFC defines the normative CLI and runtime contract for `myx` MVP (v0):
 
 - Rust core implementation, distributed as a binary (macOS-first via Homebrew).
-- Command surface is limited to `init`, `add`, `inspect`, and `build`.
+- Command surface is limited to `init`, `add`, `inspect`, `build`, and `run`.
 - Export targets are limited to Tier-1: `openai`, `mcp`, `skill`.
 - Package discovery uses local paths and project-configured static indexes.
 - Policy enforcement is mandatory and deterministic.
@@ -21,7 +21,8 @@ MVP must prove one loop with high confidence:
 1. Install package.
 2. Inspect metadata and permissions.
 3. Build deterministic target artifacts.
-4. Run target outputs with explicit security boundaries.
+4. Run tools with explicit security boundaries.
+5. Build deterministic target artifacts.
 
 Scope beyond this loop increases risk without improving the core proof.
 
@@ -29,7 +30,7 @@ Scope beyond this loop increases risk without improving the core proof.
 
 ### In Scope
 
-- Commands: `myx init`, `myx add`, `myx inspect`, `myx build`.
+- Commands: `myx init`, `myx add`, `myx inspect`, `myx build`, `myx run`.
 - Targets: `openai`, `mcp`, `skill`.
 - Sources: local package path and static index package resolution.
 - Runtime execution model: global runtime executor with declarative `http` and `subprocess` tool actions.
@@ -105,10 +106,27 @@ Rules:
 - Repeated builds with unchanged inputs must produce byte-stable outputs.
 - Export must not mutate package source files.
 
-MCP wrapper protocol modes:
-- Wrapper must support strict MCP framing mode (`--protocol mcp`) using `Content-Length` framed JSON-RPC messages over stdio.
-- Wrapper may also support a simplified line-delimited mode (`--protocol simple`) for local debugging.
+MCP runtime bridge protocol modes:
+- Bridge must support strict MCP framing mode (`--protocol mcp`) using `Content-Length` framed JSON-RPC messages over stdio.
+- Bridge may also support a simplified line-delimited mode (`--protocol simple`) for local debugging.
 - Generated MCP launch artifacts must invoke strict MCP mode explicitly.
+
+### `myx run <package>.<tool>`
+
+Purpose:
+- Execute a tool via the runtime executor with policy enforcement.
+
+Behavior:
+1. Resolve package by name using configured static indexes.
+2. Load and validate profile.
+3. Resolve tool by exact name.
+4. Parse `--input` JSON object (default `{}`).
+5. Evaluate policy and run execution via runtime executor.
+
+Rules:
+- Input must be valid JSON object and satisfy required schema fields.
+- Runtime execution must enforce declared permissions.
+- `--json` output includes command status, duration, and structured execution result.
 
 ## Capability Profile v1 Requirements
 

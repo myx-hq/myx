@@ -7,7 +7,8 @@ The MVP (v0) focuses on one deterministic loop:
 1. initialize or obtain a package,
 2. install with explicit policy review,
 3. inspect identity/tools/permissions,
-4. build deterministic target artifacts.
+4. run tools with explicit policy/runtime enforcement,
+5. build deterministic target artifacts.
 
 ## Why myx?
 
@@ -17,7 +18,7 @@ For MVP, the goal is reliability and enforcement, not maximum ecosystem coverage
 
 ## What Ships in MVP
 
-- **Rust core + CLI** with `init`, `add`, `inspect`, `build`.
+- **Rust core + CLI** with `init`, `add`, `inspect`, `build`, `run`.
 - **Capability Profile v1** with explicit `tool_class`, `execution`, and permissions.
 - **Static index + local path resolution** (no hosted registry dependency).
 - **Deterministic lockfile/install semantics** with integrity checks.
