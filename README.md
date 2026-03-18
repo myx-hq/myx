@@ -48,6 +48,14 @@ myx/
 cargo run -p myx-cli -- --help
 ```
 
+```bash
+# build MCP artifacts for a package
+cargo run -p myx-cli -- build --target mcp
+
+# validate and run generated MCP runtime config
+cargo run -p myx-runtime-executor --bin myx-mcp-wrapper -- --config .myx/mcp/runtime-config.json --healthcheck
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development rules, required checks, and PR expectations.

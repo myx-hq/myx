@@ -5,6 +5,18 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "myx-mcp-wrapper"
+path = "src/bin/myx-mcp-wrapper.rs"
+
 [dependencies]
 anyhow.workspace = true
+clap.workspace = true
 myx-core = { path = "../myx-core" }
+serde.workspace = true
+serde_json.workspace = true
+ureq.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

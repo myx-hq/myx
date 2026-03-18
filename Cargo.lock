@@ -637,7 +637,13 @@ name = "myx-runtime-executor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "myx-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "ureq",
+ "url",
 ]
 
 [[package]]
