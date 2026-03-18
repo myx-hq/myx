@@ -1,6 +1,6 @@
 # RFC 0002: Package Format (MVP)
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Summary
 

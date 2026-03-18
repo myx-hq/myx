@@ -1,6 +1,6 @@
 # RFC 0007: Runtime Executor Spec
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Purpose
 

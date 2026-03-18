@@ -1,6 +1,6 @@
 # RFC 0006: MVP Alignment Overview
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Goal
 

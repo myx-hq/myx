@@ -24,7 +24,7 @@ If behavior changes but contract docs are not updated, stop and update specs bef
 
 Agents must preserve these MVP invariants unless explicitly changing RFC 0004:
 
-1. Command surface: `init`, `add`, `inspect`, `build`.
+1. Command surface: `init`, `add`, `inspect`, `build`, `run`.
 2. Tier-1 targets: `openai`, `mcp`, `skill`.
 3. Deterministic lockfile and build outputs.
 4. Enforcement-grade policy checks for install/runtime.

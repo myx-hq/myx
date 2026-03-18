@@ -1,6 +1,6 @@
 # RFC 0009: Run Command Spec
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Purpose
 

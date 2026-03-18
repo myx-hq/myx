@@ -1,45 +1,45 @@
 # RFC 0013: MVP Green Checklist
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Core Runtime
 
-- [ ] Runtime executor spec implemented
-- [ ] HTTP execution path implemented
-- [ ] Subprocess execution path implemented
-- [ ] No-shell enforcement implemented
-- [ ] Policy enforcement wired into execution
+- [x] Runtime executor spec implemented
+- [x] HTTP execution path implemented
+- [x] Subprocess execution path implemented
+- [x] No-shell enforcement implemented
+- [x] Policy enforcement wired into execution
 
 ## CLI
 
-- [ ] `myx init`
-- [ ] `myx add`
-- [ ] `myx inspect`
-- [ ] `myx build`
-- [ ] `myx run`
+- [x] `myx init`
+- [x] `myx add`
+- [x] `myx inspect`
+- [x] `myx build`
+- [x] `myx run`
 
 ## Contracts
 
-- [ ] Capability Profile v1 enforced
-- [ ] Lockfile deterministic and atomic
-- [ ] Static index schema enforced
-- [ ] Stable error codes implemented
+- [x] Capability Profile v1 enforced
+- [x] Lockfile deterministic and atomic
+- [x] Static index schema enforced
+- [x] Stable error codes implemented
 
 ## Tier-1 Targets
 
-- [ ] `openai` export deterministic
-- [ ] `mcp` wrapper generated and runnable
-- [ ] `skill` export deterministic
-- [ ] Loss reports emitted when lossy
+- [x] `openai` export deterministic
+- [x] `mcp` runtime runner generated and runnable
+- [x] `skill` export deterministic
+- [x] Loss reports emitted when lossy
 
 ## Validation and Tests
 
-- [ ] Schema validation tests
-- [ ] Resolver tests
-- [ ] Policy denial tests
-- [ ] Runtime executor tests
-- [ ] Golden export tests
-- [ ] MCP runnable check
+- [x] Schema validation tests
+- [x] Resolver tests
+- [x] Policy denial tests
+- [x] Runtime executor tests
+- [x] Golden export tests
+- [x] MCP runnable check
 - [ ] Warm-cache benchmark tracked
 
 ## Ship Gate

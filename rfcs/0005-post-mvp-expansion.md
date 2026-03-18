@@ -1,6 +1,6 @@
 # RFC 0005: Post-MVP Expansion Scope
 
-*Status: Draft*
+*Status: Active Backlog*
 
 ## Summary
 

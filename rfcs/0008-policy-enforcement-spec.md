@@ -1,6 +1,6 @@
 # RFC 0008: Policy Enforcement Spec
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Purpose
 

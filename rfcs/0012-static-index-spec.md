@@ -1,6 +1,6 @@
 # RFC 0012: Static Index Spec
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Purpose
 
