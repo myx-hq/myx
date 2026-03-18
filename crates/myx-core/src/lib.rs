@@ -339,7 +339,20 @@ pub fn load_manifest(package_dir: &Path) -> Result<PackageManifest> {
 pub fn load_profile(profile_path: &Path) -> Result<CapabilityProfile> {
     let text = std::fs::read_to_string(profile_path)
         .with_context(|| format!("failed to read {}", profile_path.display()))?;
-    let profile: CapabilityProfile = serde_json::from_str(&text)
+    let raw: serde_json::Value = serde_json::from_str(&text)
+        .with_context(|| format!("failed to parse {}", profile_path.display()))?;
+    if let Some(obj) = raw.as_object() {
+        let has_legacy_identity = obj.contains_key("name")
+            && obj.contains_key("version")
+            && !obj.contains_key("identity");
+        if has_legacy_identity {
+            return Err(anyhow!(
+                "profile '{}' uses legacy top-level name/version fields; migrate to Capability Profile v1 shape with 'identity.name' and 'identity.version'",
+                profile_path.display()
+            ));
+        }
+    }
+    let profile: CapabilityProfile = serde_json::from_value(raw)
         .with_context(|| format!("failed to parse {}", profile_path.display()))?;
     Ok(profile)
 }
@@ -466,6 +479,7 @@ pub fn assert_supported_target(target: &str) -> Result<()> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use tempfile::TempDir;
 
     fn subprocess_manifest() -> PackageManifest {
         PackageManifest {
@@ -538,6 +552,35 @@ mod tests {
         let mut profile = subprocess_profile();
         profile.permissions.filesystem.read = vec![".".to_string()];
         validate_package(&manifest, &profile).expect("profile should validate");
+    }
+
+    #[test]
+    fn load_profile_rejects_legacy_top_level_identity_shape() {
+        let tmp = TempDir::new().expect("tempdir");
+        let profile_path = tmp.path().join("capability.json");
+        let legacy = json!({
+            "schema_version": "1",
+            "name": "legacy",
+            "version": "0.1.0",
+            "description": "legacy flat shape",
+            "tools": [],
+            "permissions": {
+                "network": [],
+                "secrets": [],
+                "filesystem": {"read": [], "write": []},
+                "subprocess": {"allowed_commands": [], "allowed_cwds": [], "allowed_env": [], "max_timeout_ms": null}
+            }
+        });
+        std::fs::write(
+            &profile_path,
+            serde_json::to_vec_pretty(&legacy).expect("serialize profile"),
+        )
+        .expect("write profile");
+
+        let err = load_profile(&profile_path).expect_err("expected migration error");
+        assert!(err
+            .to_string()
+            .contains("legacy top-level name/version fields"));
     }
 
     #[test]
