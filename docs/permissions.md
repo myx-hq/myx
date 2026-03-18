@@ -1,22 +1,74 @@
-# Permissions
+# Permissions Model (MVP)
 
-Capability packages can execute arbitrary code, access external services and perform side effects.  To build trust and support safe composition of agent systems, myx requires that every capability declares its permissions up front.  The myx CLI will display these permissions during installation and may refuse to install packages that request unsafe access without explicit user consent.
+myx treats permissions as enforceable install and runtime policy inputs, not just documentation.
 
-## Permission Types
+## Policy Intent
 
-The IR defines four categories of permissions:
+The goal is deterministic security decisions:
 
-- **Network** — A list of hostnames the capability may contact.  For example, `api.github.com` or `slack.com`.  A wildcard (`"*"`) indicates unrestricted network access; this should be avoided if possible.
-- **Secrets** — Names of environment variables or secret values required by the capability.  Examples include `GITHUB_TOKEN` or `DATABASE_URL`.  During installation, the CLI can prompt the user to provide these secrets or map them from existing credentials.
-- **Filesystem** — Paths that the capability may read and/or write.  This may be a specific file (`"/tmp/scratch.txt"`) or a directory.  An empty list implies no filesystem access.  Use with caution.
-- **Subprocess** — A boolean flag indicating whether the capability spawns subprocesses (via `exec`, `spawn` or similar).  Subprocesses increase the attack surface and should be used sparingly.
+- Same package + same policy config -> same allow/deny result.
+- Non-interactive environments should never rely on implicit prompts.
 
-## Enforcement
+## Permission Categories
 
-At the package level, permissions are declarative; myx does not sandbox code execution.  It relies on runtimes (e.g. MCP servers, agent frameworks) to enforce the declared limits.  However, by surfacing the permissions early, myx provides crucial information to developers and operators.  In future versions, myx may integrate with runtime sandboxes to enforce these boundaries automatically.
+## Network
+
+`permissions.network` lists allowed hostnames.
+
+- Prefer explicit hosts (`api.github.com`) over broad domains or wildcards.
+- Runtime HTTP actions must stay within this allowlist.
+
+## Secrets
+
+`permissions.secrets` lists required secret identifiers.
+
+- Keep this list minimal.
+- Secret presence and mapping are policy/runtime concerns; declaration is mandatory for transparency.
+
+## Filesystem
+
+`permissions.filesystem` is structured:
+
+- `read`: allowed read path rules
+- `write`: allowed write path rules
+
+Avoid broad top-level rules when narrower paths are sufficient.
+
+## Subprocess
+
+`permissions.subprocess` is structured and required for subprocess-capable tools:
+
+- `allowed_commands`
+- `allowed_cwds`
+- `allowed_env`
+- `max_timeout_ms`
+
+MVP requires strict execution constraints:
+
+- exact command allowlist
+- explicit cwd allowlist
+- explicit env passthrough allowlist
+- required timeout
+- direct exec only (no shell invocation, no shell expansion)
+
+## Policy Modes
+
+MVP supports:
+
+- `review_required` (default)
+- `permissive`
+- `strict`
+
+## Interactive Behavior
+
+In `review_required`, if package permissions exceed configured allowlists, install requires explicit user approval.
+
+## Non-interactive / CI Behavior
+
+If permissions exceed configured allowlists, install is denied. No prompt fallback.
 
 ## Best Practices
 
-- **Minimise**: Declare only the permissions that are actually needed.  For example, if your GitHub capability only reads public repositories, it may not need a secret at all.
-- **Principle of least privilege**: Prefer granular hostnames (`api.github.com`) over wildcards (`github.com`), and specific paths over top‑level directories.
-- **Transparency**: Document why each permission is needed.  The CLI could surface this documentation when asking the user for consent.
+- Declare least privilege.
+- Keep subprocess usage narrow and auditable.
+- Treat policy changes as security-relevant and test-covered.

@@ -13,5 +13,10 @@ path = "src/main.rs"
 anyhow.workspace = true
 clap.workspace = true
 myx-core = { path = "../myx-core" }
+myx-lockfile = { path = "../myx-lockfile" }
+myx-policy = { path = "../myx-policy" }
 myx-resolver = { path = "../myx-resolver" }
+myx-runtime-executor = { path = "../myx-runtime-executor" }
 myx-store = { path = "../myx-store" }
+serde_json.workspace = true
+serde_yaml.workspace = true

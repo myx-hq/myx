@@ -7,4 +7,8 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+semver.workspace = true
+serde_json.workspace = true
 myx-core = { path = "../myx-core" }
+ureq.workspace = true
+url.workspace = true

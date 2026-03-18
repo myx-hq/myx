@@ -3,7 +3,7 @@
   "$id": "https://myx.sh/schemas/capability-profile/v1/schema.json",
   "title": "Capability Profile v1",
   "type": "object",
-  "required": ["schema_version", "identity", "tools"],
+  "required": ["schema_version", "identity", "tools", "permissions"],
   "properties": {
     "schema_version": { "type": "string", "const": "1" },
     "identity": {
@@ -31,6 +31,42 @@
             "properties": {
               "kind": { "type": "string", "enum": ["http", "subprocess"] }
             }
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "required": ["network", "secrets", "filesystem", "subprocess"],
+      "properties": {
+        "network": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "secrets": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "filesystem": {
+          "type": "object",
+          "required": ["read", "write"],
+          "properties": {
+            "read": { "type": "array", "items": { "type": "string" } },
+            "write": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "subprocess": {
+          "type": "object",
+          "required": [
+            "allowed_commands",
+            "allowed_cwds",
+            "allowed_env"
+          ],
+          "properties": {
+            "allowed_commands": { "type": "array", "items": { "type": "string" } },
+            "allowed_cwds": { "type": "array", "items": { "type": "string" } },
+            "allowed_env": { "type": "array", "items": { "type": "string" } },
+            "max_timeout_ms": { "type": "integer", "minimum": 1 }
           }
         }
       }

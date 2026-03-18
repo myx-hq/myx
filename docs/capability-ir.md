@@ -1,94 +1,140 @@
-# Capability IR
+# Capability Profile (IR) v1
 
-The **Capability IR** (intermediate representation) is the heart of myx.  It captures all information needed to install, inspect and export a capability, independent of the runtime in which it will be executed.  This document describes the structure of the IR as of version 0.1.
+The myx Capability Profile is the canonical runtime-agnostic model used by the MVP CLI and adapters. This document defines the v1 shape used by `myx init/add/inspect/build`.
 
-## Schema
+## Versioning
 
-The IR is defined as a JSON object with the following top‑level fields:
+- `schema_version` is required.
+- MVP expects `schema_version: "1"`.
+- Breaking profile changes require a new major schema version.
 
-- `schema_version` (string): The version of the IR schema.  For example `"0.1"`.
-- `identity` (object): Basic identification of the capability.
-  - `name` (string): A human‑readable identifier (e.g. "github").
-  - `version` (string): A semantic version (e.g. "0.1.2").
-  - `publisher` (string): Identifier of the package author or organisation.
-  - `license` (string, optional): SPDX license identifier.
-- `metadata` (object, optional): Additional descriptive fields.
-  - `description` (string): A short description.
-  - `homepage` (string, optional): URL for more information.
-  - `source` (string, optional): Link to the upstream source code.
-- `capabilities` (array of strings): A list of semantic capability names such as `"read_issues"`, `"send_email"`, `"query_database"`.  These names are used for search and dependency analysis; they do not directly correspond to tool names.
-- `instructions` (object): Prompt snippets that instruct an agent how to use the capability.
-  - `system` (string): A system‑level prompt describing high‑level rules or context.
-  - `usage` (string, optional): A usage prompt instructing the model when to call the capability.
-- `tools` (array of objects): Structured descriptions of callable actions.  Each tool has:
-  - `name` (string): The function name exposed to the agent.
-  - `description` (string): A natural language description.
-  - `parameters` (object): A JSON Schema object describing expected arguments (`type`, `properties`, `required`).
-- `permissions` (object): Declarative declaration of what the capability may access.
-  - `network` (array of strings): Allowed hostnames (e.g. `api.github.com`).
-  - `secrets` (array of strings): Names of required secret variables (e.g. `GITHUB_TOKEN`).
-  - `filesystem` (array of strings): Paths (or patterns) the capability may read/write.
-  - `subprocess` (boolean): Whether the capability spawns subprocesses.
-- `runtime` (object, optional): Additional runtime entrypoints, used for capabilities that require a server or long‑running process.
-  - `entrypoints` (object): A map from entrypoint name to relative path.  Example: `"mcp_server": "./runtime/mcp/server.js"`.
-- `compatibility` (object): Hints about supported runtimes and platforms.
-  - `runtimes` (array of strings): Supported adapter targets (e.g. `"mcp"`, `"openai"`, `"skillmd"`).
-  - `platforms` (array of strings, optional): Supported OS/architecture combinations (e.g. `"darwin-arm64"`).
+## Top-Level Structure
 
-## Example
+A profile is a JSON object with these top-level fields:
 
-Below is a simplified example IR for a GitHub capability:
+- `schema_version` (string, required)
+- `identity` (object, required)
+- `metadata` (object, optional)
+- `capabilities` (array of strings, optional)
+- `instructions` (object, optional)
+- `tools` (array, required, non-empty)
+- `permissions` (object, required)
+- `compatibility` (object, optional)
+
+## Identity
+
+- `identity.name` (string, required)
+- `identity.version` (string, required)
+- `identity.publisher` (string, optional)
+- `identity.license` (string, optional, SPDX recommended)
+
+## Tools (Required Contract)
+
+Each tool requires:
+
+- `name` (string)
+- `description` (string)
+- `parameters` (JSON Schema object)
+- `tool_class` (enum, required)
+  - `http_api`
+  - `local_process`
+  - `filesystem_assisted`
+  - `composite`
+- `execution` (object, required)
+
+### `execution.kind = "http"`
+
+Fields:
+
+- `method` (string, required)
+- `url` (string, required)
+- `headers` (map, optional)
+- `timeout_ms` (integer, optional)
+
+### `execution.kind = "subprocess"`
+
+Fields:
+
+- `command` (string, required, executable token only)
+- `args` (array of strings, optional)
+- `cwd` (string, optional)
+- `env_passthrough` (array of strings, optional)
+- `timeout_ms` (integer, required in MVP)
+
+## Permissions (Enforcement-Grade)
+
+- `network` (array of hostnames)
+- `secrets` (array of secret names)
+- `filesystem` (object)
+  - `read` (array of path rules)
+  - `write` (array of path rules)
+- `subprocess` (object)
+  - `allowed_commands` (array)
+  - `allowed_cwds` (array)
+  - `allowed_env` (array)
+  - `max_timeout_ms` (integer)
+
+For subprocess-capable tools, subprocess permission fields must be declared and align with tool execution behavior.
+
+## Compatibility
+
+- `compatibility.runtimes` (array of target runtime ids)
+- `compatibility.platforms` (array, optional)
+
+MVP Tier-1 export targets are:
+
+- `openai`
+- `mcp`
+- `skill`
+
+## Minimal Example
 
 ```json
 {
-  "schema_version": "0.1",
+  "schema_version": "1",
   "identity": {
     "name": "github",
-    "version": "0.1.2",
+    "version": "0.1.0",
     "publisher": "myx-official",
-    "license": "MIT"
-  },
-  "metadata": {
-    "description": "GitHub capability bundle for agents.",
-    "homepage": "https://github.com/myx/github",
-    "source": "https://github.com/myx/github"
-  },
-  "capabilities": ["search_repos", "read_issues", "open_pull_requests"],
-  "instructions": {
-    "system": "You can use the GitHub tools to read repositories and manage pull requests.",
-    "usage": "Use these tools when the user asks about GitHub repositories."
+    "license": "Apache-2.0"
   },
   "tools": [
     {
       "name": "search_repositories",
-      "description": "Search GitHub repositories by query.",
+      "description": "Search GitHub repositories.",
       "parameters": {
         "type": "object",
         "properties": {
           "query": { "type": "string" }
         },
         "required": ["query"]
+      },
+      "tool_class": "http_api",
+      "execution": {
+        "kind": "http",
+        "method": "GET",
+        "url": "https://api.github.com/search/repositories?q={{query}}",
+        "timeout_ms": 10000
       }
     }
   ],
   "permissions": {
     "network": ["api.github.com"],
     "secrets": ["GITHUB_TOKEN"],
-    "filesystem": [],
-    "subprocess": false
-  },
-  "runtime": {
-    "entrypoints": {
-      "mcp_server": "./runtime/mcp/server.js"
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "subprocess": {
+      "allowed_commands": [],
+      "allowed_cwds": [],
+      "allowed_env": [],
+      "max_timeout_ms": 10000
     }
   },
   "compatibility": {
-    "runtimes": ["mcp", "openai", "skillmd"],
+    "runtimes": ["openai", "mcp", "skill"],
     "platforms": ["darwin", "linux"]
   }
 }
 ```
-
-## Evolution
-
-The IR is versioned.  Breaking changes will result in a bump to `schema_version`.  The myx CLI and adapters are expected to handle multiple IR versions, providing graceful upgrade paths where possible.

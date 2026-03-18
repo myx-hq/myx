@@ -1,10 +1,10 @@
 {
-  "schema_version": "0.1",
+  "schema_version": "1",
   "identity": {
     "name": "github",
     "version": "0.1.0",
     "publisher": "example",
-    "license": "MIT"
+    "license": "Apache-2.0"
   },
   "metadata": {
     "description": "GitHub capability bundle for myx example."
@@ -31,6 +31,13 @@
         "required": [
           "query"
         ]
+      },
+      "tool_class": "http_api",
+      "execution": {
+        "kind": "http",
+        "method": "GET",
+        "url": "https://api.github.com/search/repositories?q={{query}}",
+        "timeout_ms": 10000
       }
     }
   ],
@@ -41,16 +48,21 @@
     "secrets": [
       "GITHUB_TOKEN"
     ],
-    "filesystem": [],
-    "subprocess": false
-  },
-  "runtime": {
-    "entrypoints": {}
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "subprocess": {
+      "allowed_commands": [],
+      "allowed_cwds": [],
+      "allowed_env": [],
+      "max_timeout_ms": 10000
+    }
   },
   "compatibility": {
     "runtimes": [
       "openai",
-      "skillmd",
+      "skill",
       "mcp"
     ],
     "platforms": [
