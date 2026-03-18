@@ -105,6 +105,11 @@ Rules:
 - Repeated builds with unchanged inputs must produce byte-stable outputs.
 - Export must not mutate package source files.
 
+MCP wrapper protocol modes:
+- Wrapper must support strict MCP framing mode (`--protocol mcp`) using `Content-Length` framed JSON-RPC messages over stdio.
+- Wrapper may also support a simplified line-delimited mode (`--protocol simple`) for local debugging.
+- Generated MCP launch artifacts must invoke strict MCP mode explicitly.
+
 ## Capability Profile v1 Requirements
 
 For MVP-targetable packages, each tool must include:

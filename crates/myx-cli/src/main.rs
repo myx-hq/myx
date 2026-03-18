@@ -627,7 +627,7 @@ fn build_mcp(
 
     let launch = json!({
         "command": "myx-mcp-wrapper",
-        "args": ["--config", "runtime-config.json"],
+        "args": ["--config", "runtime-config.json", "--protocol", "mcp"],
         "cwd": ".",
         "startup": "deterministic"
     });
@@ -636,7 +636,7 @@ fn build_mcp(
     let run_script = r#"#!/usr/bin/env sh
 set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-exec "${MYX_MCP_WRAPPER_BIN:-myx-mcp-wrapper}" --config "$SCRIPT_DIR/runtime-config.json"
+exec "${MYX_MCP_WRAPPER_BIN:-myx-mcp-wrapper}" --config "$SCRIPT_DIR/runtime-config.json" --protocol mcp
 "#;
     let run_path = out_dir.join("run.sh");
     std::fs::write(&run_path, run_script)?;
@@ -899,6 +899,15 @@ mod tests {
         )
         .expect("parse runtime config");
         assert_eq!(runtime_config["base_dir"], ".");
+
+        let launch: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(tmp.path().join("launch.json")).expect("read launch"),
+        )
+        .expect("parse launch");
+        assert_eq!(
+            launch["args"],
+            serde_json::json!(["--config", "runtime-config.json", "--protocol", "mcp"])
+        );
     }
 
     #[test]
