@@ -5,6 +5,7 @@
   "type": "object",
   "required": ["packages"],
   "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
     "packages": {
       "type": "array",
       "items": {
