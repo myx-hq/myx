@@ -20,6 +20,21 @@ pub struct MyxLock {
     pub packages: Vec<LockEntry>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyLockEntry {
+    version: String,
+    resolved: String,
+    digest: String,
+    #[serde(default)]
+    permissions_snapshot: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyMyxLock {
+    version: u32,
+    packages: std::collections::BTreeMap<String, LegacyLockEntry>,
+}
+
 impl Default for MyxLock {
     fn default() -> Self {
         Self {
@@ -35,9 +50,37 @@ pub fn load_lock(path: &Path) -> Result<MyxLock> {
     }
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read lockfile '{}'", path.display()))?;
-    let lock: MyxLock = serde_json::from_str(&text)
+    let value: serde_json::Value = serde_json::from_str(&text)
         .with_context(|| format!("failed to parse lockfile '{}'", path.display()))?;
-    Ok(lock)
+
+    if let Ok(lock) = serde_json::from_value::<MyxLock>(value.clone()) {
+        return Ok(lock);
+    }
+
+    if let Ok(legacy) = serde_json::from_value::<LegacyMyxLock>(value) {
+        let mut lock = MyxLock {
+            lockfile_version: legacy.version,
+            packages: legacy
+                .packages
+                .into_iter()
+                .map(|(name, entry)| LockEntry {
+                    name,
+                    version: entry.version,
+                    source: entry.resolved,
+                    digest: entry.digest,
+                    permissions_snapshot: entry.permissions_snapshot,
+                })
+                .collect(),
+        };
+        lock.packages
+            .sort_by(|a, b| (&a.name, &a.version).cmp(&(&b.name, &b.version)));
+        return Ok(lock);
+    }
+
+    Err(anyhow::anyhow!(
+        "failed to parse lockfile '{}': expected current v1 shape or legacy map shape",
+        path.display()
+    ))
 }
 
 pub fn upsert_entry(lock: &mut MyxLock, entry: LockEntry) {
@@ -122,6 +165,41 @@ mod tests {
         assert_eq!(loaded.packages.len(), 1);
         assert_eq!(loaded.packages[0].name, "github");
         assert_eq!(loaded.packages[0].version, "1.2.3");
+    }
+
+    #[test]
+    fn load_migrates_legacy_map_shape() {
+        let tmp = TempDir::new().expect("tempdir");
+        let path = tmp.path().join("myx.lock");
+        std::fs::write(
+            &path,
+            r#"{
+  "version": 1,
+  "packages": {
+    "zeta": {
+      "version": "2.0.0",
+      "resolved": "/tmp/zeta/2.0.0",
+      "digest": "sha256:zeta",
+      "permissions_snapshot": {"network":["api.zeta.dev"]}
+    },
+    "alpha": {
+      "version": "1.0.0",
+      "resolved": "/tmp/alpha/1.0.0",
+      "digest": "sha256:alpha",
+      "permissions_snapshot": {"network":["api.alpha.dev"]}
+    }
+  }
+}"#,
+        )
+        .expect("write legacy lock");
+
+        let loaded = load_lock(&path).expect("load legacy lock");
+        assert_eq!(loaded.lockfile_version, 1);
+        assert_eq!(loaded.packages.len(), 2);
+        assert_eq!(loaded.packages[0].name, "alpha");
+        assert_eq!(loaded.packages[0].source, "/tmp/alpha/1.0.0");
+        assert_eq!(loaded.packages[1].name, "zeta");
+        assert_eq!(loaded.packages[1].source, "/tmp/zeta/2.0.0");
     }
 
     #[test]
