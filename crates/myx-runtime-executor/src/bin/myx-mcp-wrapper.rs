@@ -501,6 +501,7 @@ mod tests {
                 publisher: "myx".to_string(),
                 license: "Apache-2.0".to_string(),
             },
+            base_dir: Some(".".to_string()),
             permissions: Permissions::default(),
             tools: vec![ToolDefinition {
                 name: "search".to_string(),
