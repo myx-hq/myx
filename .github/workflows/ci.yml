@@ -25,3 +25,10 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+      - name: Warm-cache add benchmark (non-gate)
+        run: ./scripts/benchmark-warm-cache-add.sh --out ./warm-cache-add.json
+      - name: Upload warm-cache benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: warm-cache-add
+          path: ./warm-cache-add.json

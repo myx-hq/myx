@@ -67,6 +67,12 @@ cargo test --workspace
 
 If your change touches schemas or adapters, include fixture/golden tests that prove deterministic output.
 
+Warm-cache benchmark tracking (non-gate):
+
+```bash
+./scripts/benchmark-warm-cache-add.sh --out ./warm-cache-add.json
+```
+
 ## Specs and RFC Expectations
 
 - Public behavior contracts belong in RFCs.
