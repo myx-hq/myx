@@ -4,10 +4,37 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
 use myx_core::{MyxConfig, ResolvedPackage, StaticIndex};
 use semver::Version;
+use serde::Deserialize;
 
 enum IndexOrigin {
     File(PathBuf),
     Url(url::Url),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyIndexEntry {
+    version: String,
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    resolved: Option<String>,
+    digest: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyStaticIndex {
+    packages: std::collections::BTreeMap<String, Vec<LegacyIndexEntry>>,
+}
+
+#[derive(Debug, Clone)]
+struct Candidate {
+    name: String,
+    version: String,
+    source: PathBuf,
+    digest: String,
+    source_priority: usize,
 }
 
 fn parse_spec(spec: &str) -> (String, Option<String>) {
@@ -40,8 +67,8 @@ fn load_index(source: &str, cwd: &Path) -> Result<(StaticIndex, IndexOrigin)> {
             .into_body()
             .read_to_string()
             .with_context(|| format!("failed to read index source '{}'", source))?;
-        let index: StaticIndex = serde_json::from_str(&body)
-            .with_context(|| format!("failed to parse index source '{}'", source))?;
+        let index = parse_index_document(&body, source)
+            .map_err(|e| anyhow!("index '{}': {}", source, e))?;
         let url = url::Url::parse(source)
             .with_context(|| format!("failed to parse index URL '{}'", source))?;
         return Ok((index, IndexOrigin::Url(url)));
@@ -54,9 +81,65 @@ fn load_index(source: &str, cwd: &Path) -> Result<(StaticIndex, IndexOrigin)> {
     };
     let text = std::fs::read_to_string(&path)
         .with_context(|| format!("failed to read index file '{}'", path.display()))?;
-    let index: StaticIndex = serde_json::from_str(&text)
-        .with_context(|| format!("failed to parse index file '{}'", path.display()))?;
+    let index = parse_index_document(&text, &path.display().to_string())
+        .map_err(|e| anyhow!("index file '{}': {}", path.display(), e))?;
     Ok((index, IndexOrigin::File(path)))
+}
+
+fn parse_index_document(raw: &str, source_label: &str) -> Result<StaticIndex> {
+    let value: serde_json::Value = serde_json::from_str(raw)
+        .with_context(|| format!("E_INDEX_INVALID: invalid JSON in '{}'", source_label))?;
+
+    if value.get("packages").is_none() {
+        return Err(anyhow!(
+            "E_INDEX_INVALID: missing required 'packages' in '{}'",
+            source_label
+        ));
+    }
+
+    if let Some(schema_version) = value.get("schema_version").and_then(|v| v.as_u64()) {
+        if schema_version != 1 {
+            return Err(anyhow!(
+                "E_INDEX_INVALID: unsupported schema_version '{}' in '{}'; expected 1",
+                schema_version,
+                source_label
+            ));
+        }
+    }
+
+    if let Ok(current) = serde_json::from_value::<StaticIndex>(value.clone()) {
+        return Ok(current);
+    }
+
+    if let Ok(legacy) = serde_json::from_value::<LegacyStaticIndex>(value) {
+        let mut packages = Vec::new();
+        for (name, entries) in legacy.packages {
+            for entry in entries {
+                let source = entry
+                    .source
+                    .or(entry.resolved)
+                    .or(entry.url)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "E_INDEX_INVALID: legacy entry '{}' is missing source/url/resolved",
+                            name
+                        )
+                    })?;
+                packages.push(myx_core::IndexEntry {
+                    name: name.clone(),
+                    version: entry.version,
+                    source,
+                    digest: entry.digest,
+                });
+            }
+        }
+        return Ok(StaticIndex { packages });
+    }
+
+    Err(anyhow!(
+        "E_INDEX_INVALID: expected current index shape (`packages` array) or legacy map shape in '{}'",
+        source_label
+    ))
 }
 
 fn cmp_version(a: &str, b: &str) -> Ordering {
@@ -122,8 +205,8 @@ pub fn resolve(spec: &str, config: &MyxConfig, cwd: &Path) -> Result<ResolvedPac
 
     let (name, requested_version) = parse_spec(spec);
 
-    let mut candidates: Vec<(String, String, PathBuf, String)> = Vec::new();
-    for source in &config.index.sources {
+    let mut candidates: Vec<Candidate> = Vec::new();
+    for (source_priority, source) in config.index.sources.iter().enumerate() {
         let (index, origin) = load_index(source, cwd)?;
         for pkg in index.packages {
             if pkg.name != name {
@@ -135,7 +218,13 @@ pub fn resolve(spec: &str, config: &MyxConfig, cwd: &Path) -> Result<ResolvedPac
                 }
             }
             let source_path = resolve_entry_source(&origin, &pkg.source)?;
-            candidates.push((pkg.name, pkg.version, source_path, pkg.digest));
+            candidates.push(Candidate {
+                name: pkg.name,
+                version: pkg.version,
+                source: source_path,
+                digest: pkg.digest,
+                source_priority,
+            });
         }
     }
 
@@ -153,15 +242,27 @@ pub fn resolve(spec: &str, config: &MyxConfig, cwd: &Path) -> Result<ResolvedPac
         ));
     }
 
-    candidates.sort_by(|a, b| cmp_version(&a.1, &b.1));
     let selected = candidates
-        .pop()
+        .into_iter()
+        .reduce(
+            |best, next| match cmp_version(&next.version, &best.version) {
+                Ordering::Greater => next,
+                Ordering::Less => best,
+                Ordering::Equal => {
+                    if next.source_priority < best.source_priority {
+                        next
+                    } else {
+                        best
+                    }
+                }
+            },
+        )
         .ok_or_else(|| anyhow!("no matching package after resolution"))?;
     Ok(ResolvedPackage {
-        name: selected.0,
-        version: selected.1,
-        source: selected.2,
-        expected_digest: Some(selected.3),
+        name: selected.name,
+        version: selected.version,
+        source: selected.source,
+        expected_digest: Some(selected.digest),
     })
 }
 
@@ -280,5 +381,116 @@ mod tests {
         assert_eq!(resolved.version, "1.0.0");
         assert_eq!(resolved.source, v1);
         assert_eq!(resolved.expected_digest.as_deref(), Some("sha256:111"));
+    }
+
+    #[test]
+    fn resolve_prefers_earlier_index_source_when_versions_equal() {
+        let tmp = TempDir::new().expect("tempdir");
+        let first = write_package_dir(tmp.path(), "github", "1.0.0");
+        let second = write_package_dir(tmp.path(), "github-alt", "1.0.0");
+
+        let index_a = tmp.path().join("index-a.json");
+        std::fs::write(
+            &index_a,
+            format!(
+                r#"{{
+  "packages": [
+    {{"name":"github","version":"1.0.0","source":"{}","digest":"sha256:first"}}
+  ]
+}}"#,
+                first.display()
+            ),
+        )
+        .expect("write index-a");
+
+        let index_b = tmp.path().join("index-b.json");
+        std::fs::write(
+            &index_b,
+            format!(
+                r#"{{
+  "packages": [
+    {{"name":"github","version":"1.0.0","source":"{}","digest":"sha256:second"}}
+  ]
+}}"#,
+                second.display()
+            ),
+        )
+        .expect("write index-b");
+
+        let mut cfg = MyxConfig::default();
+        cfg.index
+            .sources
+            .push(index_a.to_str().expect("utf8 path").to_string());
+        cfg.index
+            .sources
+            .push(index_b.to_str().expect("utf8 path").to_string());
+
+        let resolved = resolve("github", &cfg, tmp.path()).expect("resolve equal versions");
+        assert_eq!(resolved.source, first);
+        assert_eq!(resolved.expected_digest.as_deref(), Some("sha256:first"));
+    }
+
+    #[test]
+    fn resolve_supports_legacy_map_index_shape() {
+        let tmp = TempDir::new().expect("tempdir");
+        let pkg = write_package_dir(tmp.path(), "github", "1.2.3");
+        let index_path = tmp.path().join("index-legacy.json");
+        std::fs::write(
+            &index_path,
+            format!(
+                r#"{{
+  "packages": {{
+    "github": [
+      {{"version":"1.2.3","url":"{}","digest":"sha256:legacy"}}
+    ]
+  }}
+}}"#,
+                pkg.display()
+            ),
+        )
+        .expect("write legacy index");
+
+        let mut cfg = MyxConfig::default();
+        cfg.index
+            .sources
+            .push(index_path.to_str().expect("utf8 path").to_string());
+
+        let resolved = resolve("github", &cfg, tmp.path()).expect("resolve legacy index");
+        assert_eq!(resolved.version, "1.2.3");
+        assert_eq!(resolved.source, pkg);
+        assert_eq!(resolved.expected_digest.as_deref(), Some("sha256:legacy"));
+    }
+
+    #[test]
+    fn resolve_returns_index_invalid_for_unknown_shape() {
+        let tmp = TempDir::new().expect("tempdir");
+        let index_path = tmp.path().join("index-invalid.json");
+        std::fs::write(&index_path, r#"{"hello":"world"}"#).expect("write invalid index");
+
+        let mut cfg = MyxConfig::default();
+        cfg.index
+            .sources
+            .push(index_path.to_str().expect("utf8 path").to_string());
+
+        let err = resolve("github", &cfg, tmp.path()).expect_err("expected invalid index error");
+        assert!(err.to_string().contains("E_INDEX_INVALID"));
+    }
+
+    #[test]
+    fn resolve_rejects_unsupported_index_schema_version() {
+        let tmp = TempDir::new().expect("tempdir");
+        let index_path = tmp.path().join("index-v2.json");
+        std::fs::write(&index_path, r#"{"schema_version":2,"packages":[]}"#)
+            .expect("write unsupported index");
+
+        let mut cfg = MyxConfig::default();
+        cfg.index
+            .sources
+            .push(index_path.to_str().expect("utf8 path").to_string());
+
+        let err =
+            resolve("github", &cfg, tmp.path()).expect_err("expected schema version rejection");
+        assert!(err.to_string().contains("E_INDEX_INVALID"));
+        assert!(err.to_string().contains("schema_version"));
     }
 }

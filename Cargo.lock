@@ -626,6 +626,7 @@ dependencies = [
  "anyhow",
  "myx-core",
  "semver",
+ "serde",
  "serde_json",
  "tempfile",
  "ureq",
