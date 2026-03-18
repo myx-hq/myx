@@ -101,10 +101,23 @@ pub fn evaluate_install_policy(
         });
     }
 
-    if matches!(policy.mode, PolicyMode::Strict) || non_interactive {
+    if matches!(policy.mode, PolicyMode::Strict) {
         return Ok(PolicyResult {
             decision: Decision::Deny,
-            reason: format!("permissions denied by policy: {}", missing.join(", ")),
+            reason: format!(
+                "permissions denied by strict allowlist policy: {}",
+                missing.join(", ")
+            ),
+        });
+    }
+
+    if non_interactive {
+        return Ok(PolicyResult {
+            decision: Decision::Deny,
+            reason: format!(
+                "permissions require interactive approval; non-interactive mode requires explicit allowlist entries: {}",
+                missing.join(", ")
+            ),
         });
     }
 
@@ -165,7 +178,7 @@ mod tests {
         let result =
             evaluate_install_policy(&policy, &sample_permissions(), true).expect("policy eval");
         assert!(matches!(result.decision, Decision::Deny));
-        assert!(result.reason.contains("permissions denied by policy"));
+        assert!(result.reason.contains("strict allowlist policy"));
     }
 
     #[test]
@@ -194,5 +207,6 @@ mod tests {
         let result =
             evaluate_install_policy(&policy, &sample_permissions(), true).expect("policy eval");
         assert!(matches!(result.decision, Decision::Deny));
+        assert!(result.reason.contains("non-interactive mode"));
     }
 }

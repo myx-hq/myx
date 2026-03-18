@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -30,7 +31,11 @@ enum Commands {
         package: String,
         #[arg(long)]
         config: Option<PathBuf>,
-        #[arg(long, default_value_t = false)]
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Disable interactive policy prompts"
+        )]
         non_interactive: bool,
         #[arg(long, default_value_t = false)]
         json: bool,
@@ -106,6 +111,86 @@ fn fail(code: i32, err: impl std::fmt::Display) -> CliExit {
 
 fn parse_expected_digest(v: &str) -> String {
     v.strip_prefix("sha256:").unwrap_or(v).to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NonInteractiveMode {
+    enabled: bool,
+    reason: String,
+}
+
+fn parse_boolish(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn resolve_non_interactive_from_inputs(
+    explicit_flag: bool,
+    env_override: Option<&str>,
+    ci_env: Option<&str>,
+    stdin_is_tty: bool,
+    stdout_is_tty: bool,
+) -> Result<NonInteractiveMode> {
+    if explicit_flag {
+        return Ok(NonInteractiveMode {
+            enabled: true,
+            reason: "explicit --non-interactive flag".to_string(),
+        });
+    }
+
+    if let Some(raw) = env_override {
+        let enabled = parse_boolish(raw).ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid MYX_NON_INTERACTIVE value '{}'; expected one of: 1,0,true,false,yes,no,on,off",
+                raw
+            )
+        })?;
+        return Ok(NonInteractiveMode {
+            enabled,
+            reason: format!("MYX_NON_INTERACTIVE={raw}"),
+        });
+    }
+
+    if let Some(raw_ci) = ci_env {
+        let ci_enabled = match parse_boolish(raw_ci) {
+            Some(false) => false,
+            Some(true) => true,
+            None => !raw_ci.trim().is_empty(),
+        };
+        if ci_enabled {
+            return Ok(NonInteractiveMode {
+                enabled: true,
+                reason: format!("CI={raw_ci}"),
+            });
+        }
+    }
+
+    if !stdin_is_tty || !stdout_is_tty {
+        return Ok(NonInteractiveMode {
+            enabled: true,
+            reason: "stdio is not a TTY".to_string(),
+        });
+    }
+
+    Ok(NonInteractiveMode {
+        enabled: false,
+        reason: "interactive TTY session".to_string(),
+    })
+}
+
+fn resolve_non_interactive_mode(explicit_flag: bool) -> Result<NonInteractiveMode> {
+    let env_override = std::env::var("MYX_NON_INTERACTIVE").ok();
+    let ci = std::env::var("CI").ok();
+    resolve_non_interactive_from_inputs(
+        explicit_flag,
+        env_override.as_deref(),
+        ci.as_deref(),
+        std::io::stdin().is_terminal(),
+        std::io::stdout().is_terminal(),
+    )
 }
 
 fn resolve_bundle(
@@ -241,12 +326,14 @@ fn command_init(path: Option<PathBuf>, force: bool) -> Result<()> {
 fn command_add(
     package: &str,
     config_override: Option<PathBuf>,
-    non_interactive: bool,
+    non_interactive_flag: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
     let cwd = std::env::current_dir().map_err(|e| fail(1, e))?;
     let config = load_config(config_override.as_deref(), &cwd).map_err(|e| fail(1, e))?;
     let (resolved, bundle) = resolve_bundle(package, &config, &cwd).map_err(|e| fail(4, e))?;
+    let non_interactive_mode =
+        resolve_non_interactive_mode(non_interactive_flag).map_err(|e| fail(2, e))?;
 
     for tool in &bundle.profile.tools {
         myx_runtime_executor::validate_execution(&tool.execution).map_err(|e| fail(3, e))?;
@@ -273,10 +360,22 @@ fn command_add(
         }
     }
 
-    let policy_result =
-        evaluate_install_policy(&config.policy, &bundle.profile.permissions, non_interactive)
-            .map_err(|e| fail(1, e))?;
+    let policy_result = evaluate_install_policy(
+        &config.policy,
+        &bundle.profile.permissions,
+        non_interactive_mode.enabled,
+    )
+    .map_err(|e| fail(1, e))?;
     if matches!(policy_result.decision, Decision::Deny) {
+        if non_interactive_mode.enabled {
+            return Err(fail(
+                6,
+                format!(
+                    "{} (non-interactive mode: {})",
+                    policy_result.reason, non_interactive_mode.reason
+                ),
+            ));
+        }
         return Err(fail(6, policy_result.reason));
     }
 
@@ -811,5 +910,56 @@ mod tests {
         let report = loss_report_json("openai", &issues);
         assert_eq!(report["summary"]["total"], 2);
         assert_eq!(report["summary"]["required_mismatches"], 2);
+    }
+
+    #[test]
+    fn non_interactive_flag_has_highest_priority() {
+        let mode =
+            resolve_non_interactive_from_inputs(true, Some("false"), Some("false"), true, true)
+                .expect("resolve mode");
+        assert!(mode.enabled);
+        assert_eq!(mode.reason, "explicit --non-interactive flag");
+    }
+
+    #[test]
+    fn myx_non_interactive_env_overrides_ci_and_tty() {
+        let mode =
+            resolve_non_interactive_from_inputs(false, Some("false"), Some("true"), false, false)
+                .expect("resolve mode");
+        assert!(!mode.enabled);
+        assert_eq!(mode.reason, "MYX_NON_INTERACTIVE=false");
+    }
+
+    #[test]
+    fn ci_env_enables_non_interactive_mode() {
+        let mode = resolve_non_interactive_from_inputs(false, None, Some("1"), true, true)
+            .expect("resolve mode");
+        assert!(mode.enabled);
+        assert_eq!(mode.reason, "CI=1");
+    }
+
+    #[test]
+    fn non_tty_enables_non_interactive_mode() {
+        let mode =
+            resolve_non_interactive_from_inputs(false, None, None, false, true).expect("resolve");
+        assert!(mode.enabled);
+        assert_eq!(mode.reason, "stdio is not a TTY");
+    }
+
+    #[test]
+    fn interactive_tty_stays_interactive() {
+        let mode =
+            resolve_non_interactive_from_inputs(false, None, None, true, true).expect("resolve");
+        assert!(!mode.enabled);
+        assert_eq!(mode.reason, "interactive TTY session");
+    }
+
+    #[test]
+    fn invalid_myx_non_interactive_env_is_rejected() {
+        let err = resolve_non_interactive_from_inputs(false, Some("maybe"), None, true, true)
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("invalid MYX_NON_INTERACTIVE value"));
     }
 }
