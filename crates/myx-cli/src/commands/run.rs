@@ -3,7 +3,8 @@ use std::time::Instant;
 
 use anyhow::Result;
 use myx_core::load_config;
-use myx_policy::{evaluate_install_policy, Decision};
+use myx_policy::{evaluate_install_policy, Decision, PolicyErrorCode};
+use myx_runtime_executor::RuntimeErrorCode;
 use serde_json::{json, Value};
 
 use crate::exit::{fail, CliExit};
@@ -69,14 +70,22 @@ fn validate_input_against_schema(schema: &Value, input: &Value) -> Result<(), Cl
     Ok(())
 }
 
-fn classify_runtime_error(message: &str) -> i32 {
-    if message.contains("not allowed")
-        || message.contains("outside permissions")
-        || message.contains("permissions.")
-    {
-        return 6;
+fn map_runtime_error_to_exit_code(code: RuntimeErrorCode) -> i32 {
+    match code {
+        RuntimeErrorCode::ExecutionInvalid => 3,
+        RuntimeErrorCode::PolicyDenied
+        | RuntimeErrorCode::NetworkDenied
+        | RuntimeErrorCode::SubprocessDenied
+        | RuntimeErrorCode::FilesystemDenied => 6,
+        RuntimeErrorCode::Timeout | RuntimeErrorCode::RuntimeFailure => 1,
     }
-    1
+}
+
+fn map_policy_error_to_exit_code(code: PolicyErrorCode) -> i32 {
+    match code {
+        PolicyErrorCode::InvalidConfiguration => 3,
+        PolicyErrorCode::PromptIo => 1,
+    }
 }
 
 pub fn command_run(
@@ -99,7 +108,7 @@ pub fn command_run(
         &bundle.profile.permissions,
         non_interactive_mode.enabled,
     )
-    .map_err(|e| fail(1, e))?;
+    .map_err(|e| fail(map_policy_error_to_exit_code(e.code), e))?;
     if matches!(policy_result.decision, Decision::Deny) {
         if non_interactive_mode.enabled {
             return Err(fail(
@@ -140,8 +149,10 @@ pub fn command_run(
         &input_value,
     )
     .map_err(|e| {
-        let msg = e.to_string();
-        fail(classify_runtime_error(&msg), msg)
+        fail(
+            map_runtime_error_to_exit_code(e.code),
+            format!("{:?}: {}", e.code, e.message),
+        )
     })?;
     let duration_ms = start.elapsed().as_millis() as u64;
 

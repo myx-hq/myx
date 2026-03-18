@@ -127,6 +127,11 @@ Rules:
 - Input must be valid JSON object and satisfy required schema fields.
 - Runtime execution must enforce declared permissions.
 - `--json` output includes command status, duration, and structured execution result.
+- Runtime/policy category mapping for deterministic exits:
+  - `execution_invalid` -> exit `3`
+  - `policy_denied` / `network_denied` / `subprocess_denied` / `filesystem_denied` -> exit `6`
+  - `timeout` / `runtime_failure` / `policy_prompt_io` -> exit `1`
+  - `policy_invalid_configuration` -> exit `3`
 
 ## Capability Profile v1 Requirements
 

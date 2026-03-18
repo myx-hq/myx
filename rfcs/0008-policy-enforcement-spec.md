@@ -74,7 +74,7 @@ Allow? (y/n)
 
 ```json
 {
-  "error": "E_POLICY_DENIED",
+  "error": "policy_denied",
   "reason": "command 'bash' not allowed"
 }
 ```
@@ -89,11 +89,12 @@ Policy checks happen at:
 
 ## Recommended Exit/Error Categories
 
-- `E_POLICY_DENIED`
-- `E_POLICY_INTERACTIVE_REQUIRED`
-- `E_NETWORK_DENIED`
-- `E_SUBPROCESS_DENIED`
-- `E_FILESYSTEM_DENIED`
+- `policy_denied`
+- `policy_invalid_configuration`
+- `policy_prompt_io`
+- `network_denied`
+- `subprocess_denied`
+- `filesystem_denied`
 
 ## MVP Constraints
 

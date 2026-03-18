@@ -3,12 +3,19 @@ use std::path::PathBuf;
 use anyhow::Result;
 use myx_core::load_config;
 use myx_lockfile::{load_lock, upsert_entry, write_lock_atomic, LockEntry};
-use myx_policy::{evaluate_install_policy, Decision};
+use myx_policy::{evaluate_install_policy, Decision, PolicyErrorCode};
 use serde_json::json;
 
 use crate::exit::{fail, CliExit};
 use crate::non_interactive::resolve_non_interactive_mode;
 use crate::util::{parse_expected_digest, resolve_bundle};
+
+fn map_policy_error_to_exit_code(code: PolicyErrorCode) -> i32 {
+    match code {
+        PolicyErrorCode::InvalidConfiguration => 3,
+        PolicyErrorCode::PromptIo => 1,
+    }
+}
 
 pub fn command_add(
     package: &str,
@@ -52,7 +59,7 @@ pub fn command_add(
         &bundle.profile.permissions,
         non_interactive_mode.enabled,
     )
-    .map_err(|e| fail(1, e))?;
+    .map_err(|e| fail(map_policy_error_to_exit_code(e.code), e))?;
     if matches!(policy_result.decision, Decision::Deny) {
         if non_interactive_mode.enabled {
             return Err(fail(

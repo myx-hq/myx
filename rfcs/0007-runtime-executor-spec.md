@@ -119,17 +119,19 @@ load tool
 
 ## Failure Modes
 
-- `E_EXEC_INVALID`
-- `E_POLICY_DENIED`
-- `E_TIMEOUT`
-- `E_RUNTIME_FAIL`
-- `E_SECRET_MISSING`
-- `E_NETWORK_DENIED`
-- `E_FILESYSTEM_DENIED`
+Runtime failures should be categorized with stable codes:
+
+- `execution_invalid`
+- `policy_denied`
+- `network_denied`
+- `subprocess_denied`
+- `filesystem_denied`
+- `timeout`
+- `runtime_failure`
 
 ## Determinism Requirements
 
 - same input + same environment policy should produce the same execution plan
 - timeouts should be measured consistently
 - template resolution should be explicit and deterministic
-- failures should map to stable error codes
+- failures should map to stable error codes and deterministic CLI exit codes

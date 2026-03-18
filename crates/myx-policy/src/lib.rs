@@ -1,6 +1,5 @@
 use std::io::{self, Write};
 
-use anyhow::Result;
 use myx_core::{Permissions, PolicyConfig, PolicyMode};
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +14,36 @@ pub struct PolicyResult {
     pub decision: Decision,
     pub reason: String,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PolicyErrorCode {
+    InvalidConfiguration,
+    PromptIo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyError {
+    pub code: PolicyErrorCode,
+    pub message: String,
+}
+
+impl PolicyError {
+    fn new(code: PolicyErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for PolicyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for PolicyError {}
 
 fn find_missing(allowed: &[String], requested: &[String]) -> Vec<String> {
     if allowed.iter().any(|a| a == "*") {
@@ -39,21 +68,26 @@ fn contains_wildcard(values: &[String]) -> bool {
     values.iter().any(|v| v == "*")
 }
 
-fn validate_subprocess_policy_allowlists(policy: &PolicyConfig) -> Result<()> {
+fn validate_subprocess_policy_allowlists(
+    policy: &PolicyConfig,
+) -> std::result::Result<(), PolicyError> {
     if contains_wildcard(&policy.allow_subprocess_commands) {
-        anyhow::bail!(
+        return Err(PolicyError::new(
+            PolicyErrorCode::InvalidConfiguration,
             "policy.allow_subprocess_commands must use exact allowlist entries; wildcard '*' is not allowed in MVP"
-        );
+        ));
     }
     if contains_wildcard(&policy.allow_subprocess_cwds) {
-        anyhow::bail!(
+        return Err(PolicyError::new(
+            PolicyErrorCode::InvalidConfiguration,
             "policy.allow_subprocess_cwds must use exact allowlist entries; wildcard '*' is not allowed in MVP"
-        );
+        ));
     }
     if contains_wildcard(&policy.allow_subprocess_env) {
-        anyhow::bail!(
+        return Err(PolicyError::new(
+            PolicyErrorCode::InvalidConfiguration,
             "policy.allow_subprocess_env must use exact allowlist entries; wildcard '*' is not allowed in MVP"
-        );
+        ));
     }
     Ok(())
 }
@@ -98,16 +132,20 @@ fn missing_permissions(policy: &PolicyConfig, permissions: &Permissions) -> Vec<
     missing
 }
 
-fn prompt_approve(missing: &[String]) -> Result<bool> {
+fn prompt_approve(missing: &[String]) -> std::result::Result<bool, PolicyError> {
     println!("Policy review required. Missing allowlist entries:");
     for item in missing {
         println!("  - {item}");
     }
     print!("Approve install anyway? [y/N]: ");
-    io::stdout().flush()?;
+    io::stdout()
+        .flush()
+        .map_err(|e| PolicyError::new(PolicyErrorCode::PromptIo, e.to_string()))?;
 
     let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| PolicyError::new(PolicyErrorCode::PromptIo, e.to_string()))?;
     let normalized = input.trim().to_ascii_lowercase();
     Ok(matches!(normalized.as_str(), "y" | "yes"))
 }
@@ -116,7 +154,7 @@ pub fn evaluate_install_policy(
     policy: &PolicyConfig,
     permissions: &Permissions,
     non_interactive: bool,
-) -> Result<PolicyResult> {
+) -> std::result::Result<PolicyResult, PolicyError> {
     validate_subprocess_policy_allowlists(policy)?;
 
     if matches!(policy.mode, PolicyMode::Permissive) {
