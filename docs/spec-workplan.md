@@ -41,10 +41,11 @@ Definition of done:
 Status: Started (this repo now includes RFC 0004 draft)
 
 - RFC 0004: CLI command semantics, output contract, exit codes, lockfile behavior.
+- RFC 0005: Post-MVP expansion scope for deferred command/registry/target features.
 
 Definition of done:
 
-- `myx init/add/inspect/build/publish` have unambiguous success/failure behavior.
+- `myx init/add/inspect/build` have unambiguous success/failure behavior.
 - Non-interactive and CI-safe behavior is defined.
 - Lockfile update semantics are deterministic.
 
@@ -87,9 +88,9 @@ Definition of done:
 
 ## Immediate Next RFCs
 
-After RFC 0004, highest leverage order:
+After RFC 0005, highest leverage order:
 
-1. RFC 0005: Lockfile Format and Resolution Algorithm.
-2. RFC 0006: Adapter Conformance Levels and Diagnostics.
-3. RFC 0007: Registry API v1.
-4. RFC 0008: Security Policy Evaluation and Signature Verification.
+1. RFC 0006: Lockfile Format and Resolution Algorithm.
+2. RFC 0007: Adapter Conformance Levels and Diagnostics.
+3. RFC 0008: Registry API v1.
+4. RFC 0009: Security Policy Evaluation and Signature Verification.

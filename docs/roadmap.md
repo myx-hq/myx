@@ -17,15 +17,14 @@ This roadmap outlines the planned milestones for myx.  The versions and dates ar
 
 *Goals:*
 
-- Implement a Node.js/TypeScript CLI prototype supporting:
+- Implement a Rust CLI/core MVP supporting:
   - `myx init` – initialise a new package scaffold.
-  - `myx add` – install a package from a local directory or registry.
+  - `myx add` – install a package from a local directory or static index.
   - `myx inspect` – display package metadata and permissions.
-  - `myx build` – export the installed package to a runtime format (e.g. OpenAI tools, SKILL.md).
-  - `myx publish` – publish a package to a registry.
-- Implement importers for SKILL.md and MCP server descriptors.
-- Implement exporters for OpenAI tool schemas and SKILL.md.
-- Support basic lockfile creation and package caching.
+  - `myx build` – export to Tier-1 runtime targets (`openai`, `mcp`, `skill`).
+- Implement global runtime executor with declarative `http` and constrained `subprocess` actions.
+- Enforce review-first policy with deterministic lockfile and install semantics.
+- Keep importers non-blocking for MVP release.
 
 ## v0.3 – Registry Implementation
 

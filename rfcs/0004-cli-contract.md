@@ -1,175 +1,194 @@
-# RFC 0004: CLI Contract and Package Lifecycle
+# RFC 0004: MVP CLI Contract (Rust Core)
 
 *Status: Draft*
 
 ## Summary
 
-This RFC defines the normative behavior of the myx CLI for v0.2:
+This RFC defines the normative CLI and runtime contract for `myx` MVP (v0):
 
-- Command surface and semantics for `init`, `add`, `inspect`, `build`, `publish`, and `list-adapters`.
-- Output and exit code contract for interactive and CI usage.
-- Lockfile update semantics and deterministic resolution expectations.
+- Rust core implementation, distributed as a binary (macOS-first via Homebrew).
+- Command surface is limited to `init`, `add`, `inspect`, and `build`.
+- Export targets are limited to Tier-1: `openai`, `mcp`, `skill`.
+- Package discovery uses local paths and project-configured static indexes.
+- Policy enforcement is mandatory and deterministic.
 
-The goal is to make CLI behavior predictable before implementation.
+Anything removed from prior broader CLI scope is deferred to RFC 0005.
 
 ## Motivation
 
-Current docs list planned commands, but there is no normative contract for:
+MVP must prove one loop with high confidence:
 
-- Inputs and defaults.
-- How commands behave in non-interactive environments.
-- Which failures are warnings vs hard errors.
-- When and how lockfile state changes.
+1. Install package.
+2. Inspect metadata and permissions.
+3. Build deterministic target artifacts.
+4. Run target outputs with explicit security boundaries.
 
-Without a CLI contract, adapters and registry work cannot converge on stable integration behavior.
+Scope beyond this loop increases risk without improving the core proof.
 
-## Goals
+## MVP Scope
 
-1. Define a minimal, coherent CLI surface for v0.2.
-2. Ensure deterministic outcomes for install/build workflows.
-3. Support both human-readable and machine-readable outputs.
-4. Keep room for future extension without breaking scripts.
+### In Scope
 
-## Non-Goals
+- Commands: `myx init`, `myx add`, `myx inspect`, `myx build`.
+- Targets: `openai`, `mcp`, `skill`.
+- Sources: local package path and static index package resolution.
+- Runtime execution model: global runtime executor with declarative `http` and `subprocess` tool actions.
+- Lockfile: deterministic, atomic writes on successful install only.
 
-- Plugin runtime architecture details.
-- UX copy and colorized terminal formatting.
-- Full dependency solver design beyond direct package pins for v0.2.
+### Out of Scope
+
+Deferred to RFC 0005:
+
+- `myx publish`
+- `myx list-adapters`
+- Hosted registry API and auth flows
+- Additional targets (`vercel`, `gemini`, `claude`)
+- External adapter plugin system
 
 ## Command Contracts
 
 ### `myx init`
 
 Purpose:
-- Scaffold a package directory with baseline files.
-
-Inputs:
-- Optional target directory (default: current directory).
-- Optional flags for package name, publisher, and template.
+- Scaffold a package directory.
 
 Behavior:
-1. If target directory is empty or does not exist, create scaffold files: `myx.yaml`, `capability.json`, `prompts/system.md`, and `tools/` (empty or sample schema).
-2. If required files already exist, command fails unless `--force` is set.
-3. Scaffold values must be internally consistent (`name`, `version`, IR pointers).
+1. Create baseline files when target is empty or missing:
+- `myx.yaml`
+- `capability.json`
+- `prompts/system.md`
+- `tools/` (empty or sample schema)
+2. Fail if required files exist unless `--force` is set.
+3. Ensure scaffold metadata and IR pointers are internally consistent.
 
-### `myx add <name@version | path>`
+### `myx add <name|path>`
 
 Purpose:
-- Add a package from registry or local path into the project.
+- Install a package into the local workspace/store and update `myx.lock`.
 
 Behavior:
-1. Resolve source. Local path sources validate immediately; registry references fetch metadata and then tarball content.
-2. Validate package structure and checksums.
-3. Evaluate declared permissions against local policy.
-4. Install package into local cache/workspace layout.
-5. Update lockfile atomically on success.
+1. Resolve source:
+- If `<name|path>` is an existing path, treat as local package.
+- Otherwise resolve by package name using configured static indexes.
+2. Validate package structure, checksums, and profile compatibility.
+3. Evaluate permissions against policy.
+4. Install to local store/workspace state.
+5. Atomically update `myx.lock`.
 
 Failure rules:
-- Validation, integrity, or policy failure results in no lockfile mutation.
-- Partial downloads must not leave active installed state.
+- Any validation, resolution, integrity, or policy failure leaves `myx.lock` unchanged.
+- Partial install state must not be considered active.
 
-### `myx inspect <name | path>`
-
-Purpose:
-- Show package metadata, compatibility, tools, and permissions.
-
-Behavior:
-- By default prints human-readable summary.
-- `--json` prints structured output with stable keys.
-- Missing package returns non-zero exit code.
-
-### `myx build --target <adapter>`
+### `myx inspect <name|path>`
 
 Purpose:
-- Produce runtime artifacts from `capability.json`.
+- Display package identity, capabilities, tool classes, execution declarations, and permissions.
 
 Behavior:
-1. Load and validate package IR.
-2. Resolve export adapter by exact target id.
-3. Generate artifacts under `adapters/<target>/`.
-4. Optionally fail on adapter warnings when `--strict` is enabled.
+- Human-readable output by default.
+- `--json` emits stable machine-readable output.
+- Missing package or invalid source returns non-zero exit code.
+
+### `myx build --target <openai|mcp|skill>`
+
+Purpose:
+- Export deterministic runtime artifacts from package IR/profile.
+
+Behavior:
+1. Load and validate package profile.
+2. Resolve built-in adapter by exact target id.
+3. Generate artifacts under `.myx/<target>/...`.
+4. Emit loss report when lossy conversion occurs.
+5. Hard-fail on required semantic mismatch.
 
 Rules:
-- Exporters must not mutate source IR files.
-- Repeated builds with same inputs must be deterministic.
+- Repeated builds with unchanged inputs must produce byte-stable outputs.
+- Export must not mutate package source files.
 
-### `myx publish`
+## Capability Profile v1 Requirements
 
-Purpose:
-- Publish package to configured registry.
+For MVP-targetable packages, each tool must include:
 
-Behavior:
-1. Validate package and ensure required files exist.
-2. Ensure adapter artifacts are present or build them.
-3. Create versioned archive and checksum.
-4. Upload metadata and archive.
-5. Reject overwrite of existing version.
+- Required `tool_class` enum:
+  - `http_api`
+  - `local_process`
+  - `filesystem_assisted`
+  - `composite`
+- Required `execution` block with `kind`:
+  - `http`
+  - `subprocess`
 
-### `myx list-adapters`
+Missing required profile fields are validation errors.
 
-Purpose:
-- Enumerate discoverable import/export adapters.
+## Policy and Security Contract
 
-Behavior:
-- Outputs adapter id, type (`import` or `export`), version, and capability flags.
-- `--json` output is stable for scripting.
+Default policy mode is review-required.
+
+### Interactive
+
+- User must explicitly approve requested permissions before install completes.
+
+### Non-interactive / CI
+
+- Install is denied unless permissions are pre-approved by explicit allowlist configuration.
+
+### Subprocess Constraints (MVP)
+
+For `execution.kind = subprocess`, executor enforcement must include:
+
+- Exact command allowlist.
+- Explicit cwd rules.
+- Explicit env passthrough allowlist.
+- Required timeout.
+- Direct exec only (no shell invocation, no shell expansion).
+
+## Configuration Resolution
+
+Configuration precedence:
+
+1. Command line flags.
+2. Environment variables.
+3. Project `myx.config.toml`.
+4. Global user config.
+
+Command-line values always win.
 
 ## Output Contract
 
-Each command supports:
+All commands support:
 
 - Human-readable default output.
-- Machine-readable output via `--json`.
+- JSON output via `--json`.
 
-JSON output rules:
+JSON output requirements:
 
-- UTF-8 JSON object at top level.
-- Includes `command`, `ok`, and `timestamp`.
-- On failure includes `error.code`, `error.message`, and optional `error.details`.
+- Top-level object with `command`, `ok`, `timestamp`.
+- On failure: `error.code`, `error.message`, optional `error.details`.
 
 ## Exit Codes
 
 - `0`: Success.
 - `1`: Generic runtime or unexpected error.
-- `2`: Invalid CLI usage (arguments, flags, missing required inputs).
-- `3`: Validation error (manifest/IR/package structure).
-- `4`: Resolution or fetch error (registry/network/not found).
-- `5`: Integrity or trust failure (checksum/signature mismatch).
-- `6`: Policy denial (permissions rejected by policy).
+- `2`: Invalid CLI usage.
+- `3`: Validation error.
+- `4`: Resolution/fetch error.
+- `5`: Integrity/trust error.
+- `6`: Policy denial.
 
 ## Lockfile Semantics
 
-`myx add` and other install-mutating operations must:
+Install-mutating operations must:
 
-1. Write lockfile only after successful validation and install.
-2. Preserve deterministic ordering of package entries.
-3. Record resolved source, version, digest, and install-time permissions snapshot.
-4. Use atomic write (temp file + rename) to prevent partial lockfiles.
+1. Write `myx.lock` only after full success.
+2. Preserve deterministic ordering of entries.
+3. Record resolved source, version, digest, and install-time permission snapshot.
+4. Use atomic write strategy (temporary file + rename).
 
-Lockfile schema details are deferred to RFC 0005, but these semantics are normative for CLI behavior.
+## Determinism
 
-## Configuration Resolution
+Given identical package source, version, policy config, and target:
 
-For v0.2, CLI config is resolved in this order:
+- `myx add` must produce identical lockfile state.
+- `myx build` must produce identical exported artifacts.
 
-1. Command line flags.
-2. Environment variables.
-3. Project-level config file (if present).
-4. Global user config.
-
-Explicit command-line values always win.
-
-## Determinism and Reproducibility
-
-For a fixed package source, version, and policy configuration:
-
-- `myx add` must produce the same lockfile state.
-- `myx build --target X` must produce byte-stable outputs where adapter inputs are unchanged.
-
-If complete determinism is impossible for an adapter, it must emit a warning with reason.
-
-## Open Questions
-
-- Should `myx add` support version ranges in v0.2 or require exact pins only?
-- Should `myx publish` require signatures by default or keep signatures optional?
-- Should `build` write artifacts in-place only, or also support an explicit output directory?
+If an adapter cannot preserve determinism for a field, it must emit a structured loss report and fail when the loss affects required semantics.
