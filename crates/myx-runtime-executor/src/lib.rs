@@ -141,6 +141,8 @@ fn validate_tool_permissions(
     permissions: &Permissions,
     base_dir: &Path,
 ) -> Result<()> {
+    validate_subprocess_allowlists(permissions)?;
+
     match &tool.execution {
         ToolExecution::Http { url, .. } => {
             let host = extract_host_from_template(url).with_context(|| {
@@ -164,7 +166,7 @@ fn validate_tool_permissions(
             timeout_ms,
             ..
         } => {
-            if !contains_or_wildcard(&permissions.subprocess.allowed_commands, command) {
+            if !contains_exact(&permissions.subprocess.allowed_commands, command) {
                 anyhow::bail!(
                     "tool '{}' command '{}' is not in permissions.subprocess.allowed_commands",
                     tool.name,
@@ -193,7 +195,7 @@ fn validate_tool_permissions(
             }
 
             for env_key in env_passthrough {
-                if !contains_or_wildcard(&permissions.subprocess.allowed_env, env_key) {
+                if !contains_exact(&permissions.subprocess.allowed_env, env_key) {
                     anyhow::bail!(
                         "tool '{}' env '{}' is not in permissions.subprocess.allowed_env",
                         tool.name,
@@ -345,7 +347,7 @@ fn execute_subprocess(
     base_dir: &Path,
     args: &Map<String, Value>,
 ) -> Result<ExecutionOutput> {
-    if !contains_or_wildcard(&permissions.subprocess.allowed_commands, command) {
+    if !contains_exact(&permissions.subprocess.allowed_commands, command) {
         anyhow::bail!(
             "subprocess command '{}' not allowed by permissions.subprocess.allowed_commands",
             command
@@ -371,7 +373,7 @@ fn execute_subprocess(
     }
 
     for env_key in env_passthrough {
-        if !contains_or_wildcard(&permissions.subprocess.allowed_env, env_key) {
+        if !contains_exact(&permissions.subprocess.allowed_env, env_key) {
             anyhow::bail!(
                 "subprocess env '{}' not allowed by permissions.subprocess.allowed_env",
                 env_key
@@ -492,6 +494,33 @@ fn contains_or_wildcard(allowed: &[String], value: &str) -> bool {
     allowed.iter().any(|a| a == "*" || a == value)
 }
 
+fn contains_exact(allowed: &[String], value: &str) -> bool {
+    allowed.iter().any(|a| a == value)
+}
+
+fn contains_wildcard(allowed: &[String]) -> bool {
+    allowed.iter().any(|a| a == "*")
+}
+
+fn validate_subprocess_allowlists(permissions: &Permissions) -> Result<()> {
+    if contains_wildcard(&permissions.subprocess.allowed_commands) {
+        anyhow::bail!(
+            "permissions.subprocess.allowed_commands must use exact entries; wildcard '*' is not allowed in MVP"
+        );
+    }
+    if contains_wildcard(&permissions.subprocess.allowed_cwds) {
+        anyhow::bail!(
+            "permissions.subprocess.allowed_cwds must use exact entries; wildcard '*' is not allowed in MVP"
+        );
+    }
+    if contains_wildcard(&permissions.subprocess.allowed_env) {
+        anyhow::bail!(
+            "permissions.subprocess.allowed_env must use exact entries; wildcard '*' is not allowed in MVP"
+        );
+    }
+    Ok(())
+}
+
 fn extract_host_from_template(url_template: &str) -> Result<String> {
     let parsed = match url::Url::parse(url_template) {
         Ok(url) => url,
@@ -543,9 +572,6 @@ fn resolve_cwd(base_dir: &Path, cwd: Option<&str>) -> PathBuf {
 }
 
 fn cwd_is_allowed(base_dir: &Path, requested: &Path, allowed_cwds: &[String]) -> bool {
-    if allowed_cwds.iter().any(|a| a == "*") {
-        return true;
-    }
     let requested_norm = normalize_path(requested);
     allowed_cwds.iter().any(|entry| {
         let allow_path = resolve_cwd(base_dir, Some(entry));
@@ -667,6 +693,22 @@ mod tests {
         )
         .expect_err("expected filesystem bounds failure");
         assert!(err.to_string().contains("filesystem bounds"));
+    }
+
+    #[test]
+    fn subprocess_rejects_wildcard_command_allowlist() {
+        let tmp = TempDir::new().expect("tempdir");
+        let mut permissions = test_permissions();
+        permissions.subprocess.allowed_commands = vec!["*".to_string()];
+
+        let err = execute_tool(
+            &subprocess_tool(),
+            &permissions,
+            tmp.path(),
+            &serde_json::json!({"message":"hello"}),
+        )
+        .expect_err("expected wildcard deny");
+        assert!(err.to_string().contains("exact entries"));
     }
 
     #[test]

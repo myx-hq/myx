@@ -230,6 +230,10 @@ fn merge_strings(target: &mut Vec<String>, incoming: Vec<String>) {
     }
 }
 
+fn contains_wildcard(values: &[String]) -> bool {
+    values.iter().any(|v| v == "*")
+}
+
 fn merge_config(base: &mut MyxConfig, incoming: MyxConfig) {
     merge_strings(&mut base.index.sources, incoming.index.sources);
 
@@ -419,6 +423,21 @@ pub fn validate_package(manifest: &PackageManifest, profile: &CapabilityProfile)
                         "subprocess tools require permissions.subprocess.max_timeout_ms"
                     ));
                 }
+                if contains_wildcard(&profile.permissions.subprocess.allowed_commands) {
+                    return Err(anyhow!(
+                        "subprocess permissions must use exact command allowlists; wildcard '*' is not allowed in permissions.subprocess.allowed_commands"
+                    ));
+                }
+                if contains_wildcard(&profile.permissions.subprocess.allowed_cwds) {
+                    return Err(anyhow!(
+                        "subprocess permissions must use exact cwd allowlists; wildcard '*' is not allowed in permissions.subprocess.allowed_cwds"
+                    ));
+                }
+                if contains_wildcard(&profile.permissions.subprocess.allowed_env) {
+                    return Err(anyhow!(
+                        "subprocess permissions must use exact env allowlists; wildcard '*' is not allowed in permissions.subprocess.allowed_env"
+                    ));
+                }
                 if profile.permissions.filesystem.read.is_empty()
                     && profile.permissions.filesystem.write.is_empty()
                 {
@@ -519,5 +538,16 @@ mod tests {
         let mut profile = subprocess_profile();
         profile.permissions.filesystem.read = vec![".".to_string()];
         validate_package(&manifest, &profile).expect("profile should validate");
+    }
+
+    #[test]
+    fn subprocess_tools_reject_wildcard_subprocess_permissions() {
+        let manifest = subprocess_manifest();
+        let mut profile = subprocess_profile();
+        profile.permissions.filesystem.read = vec![".".to_string()];
+        profile.permissions.subprocess.allowed_commands = vec!["*".to_string()];
+        let err =
+            validate_package(&manifest, &profile).expect_err("expected subprocess wildcard error");
+        assert!(err.to_string().contains("exact command allowlists"));
     }
 }
