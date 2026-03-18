@@ -22,6 +22,23 @@ An **export adapter** takes a Capability IR instance and a destination directory
 
 Export adapters are free to perform additional validation on the IR and may emit warnings if some features are unsupported by the target runtime.  They should not mutate the IR itself.
 
+## MCP Runtime Wrapper Interop (MVP)
+
+For MVP, generated MCP artifacts use `myx-mcp-wrapper` in strict mode:
+
+- `--protocol mcp` uses `Content-Length` framed JSON-RPC messages over stdio.
+- `--protocol simple` preserves the legacy line-delimited JSON loop for local debugging.
+
+Current strict MCP mode is intentionally narrow. It supports the MVP method surface used by generated artifacts:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+- `ping`
+- `shutdown`
+- `notifications/initialized`
+- `exit`
+
 ## Implementing Adapters
 
 Adapters can be written in any language supported by the myx CLI (initially TypeScript/Node.js).  To be recognised by the CLI, an adapter must register itself in a discovery mechanism (e.g. by exporting certain symbols or by following a naming convention).  The CLI will iterate over available import adapters to determine which one matches a given source directory, and over export adapters to list available output formats.
