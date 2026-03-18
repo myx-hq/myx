@@ -1,63 +1,118 @@
-# RFC 0003: Adapter Interface
+# RFC 0003: Built-In Adapter Contract (MVP)
 
 *Status: Draft*
 
 ## Summary
 
-This RFC defines the minimal interfaces for import and export adapters in the myx ecosystem.  A clear contract makes it easy for third parties to add support for new source formats and target runtimes without modifying the core library.
+This RFC defines the adapter contract for myx MVP (v0) as implemented by the Rust core.
+
+For MVP:
+
+- Export adapters are built in and selected by exact target id: `openai`, `mcp`, `skill`.
+- Adapter behavior is deterministic and produces explicit loss reports.
+- Dynamic adapter discovery and external plugin loading are out of scope.
+
+This RFC aligns with RFC 0004 (MVP CLI contract) and RFC 0005 (post-MVP expansion).
 
 ## Motivation
 
-The flexibility of myx hinges on its adapter system.  Adapters allow the CLI to ingest capability definitions from diverse formats and output runtime‑specific artefacts.  A lightweight, language‑agnostic interface enables rapid expansion of supported ecosystems.
+Earlier drafts described a generic third-party adapter/plugin interface. That model does not match MVP implementation scope.
 
-## Import Adapter Interface
+MVP needs a tighter contract:
 
-An import adapter is a module that exports two functions:
+1. one deterministic build path,
+2. one enforcement model,
+3. one target set.
 
-```ts
-/**
- * Determines whether the adapter can handle the given path.
- * Should return true if `path` contains a capability in this format.
- */
-export function detect(path: string): Promise<boolean>;
+The goal is to prove install/inspect/build/runtime correctness before opening the adapter surface.
 
-/**
- * Converts the capability at `path` into the canonical IR.
- * Throws an error if the input is malformed or unsupported.
- */
-export function importCapability(path: string): Promise<CapabilityIR>;
-```
+## MVP Scope
 
-Guidelines:
+### In Scope
 
-- `detect()` must not perform heavy operations; it should quickly identify whether the directory contains a recognisable file (e.g. `SKILL.md`, `server.json`).
-- `importCapability()` should read the necessary files and populate all IR fields.  If some fields cannot be inferred, it may leave them blank or apply defaults.
-- If multiple import adapters can handle the same folder, the CLI will apply them in order of specificity (to be defined).
+- Built-in export target handlers for `openai`, `mcp`, `skill`.
+- Deterministic artifact emission under `.myx/<target>/...`.
+- Structured loss-report generation and required-mismatch hard failures.
+- Validation coupling to Capability Profile v1 (`tool_class`, `execution`, permissions).
 
-## Export Adapter Interface
+### Out of Scope (Deferred to RFC 0005)
 
-An export adapter exports a single function:
+- External adapter plugins.
+- Runtime adapter discovery/registration commands (including `myx list-adapters`).
+- Adapter interfaces intended for arbitrary third-party runtime loading.
 
-```ts
-/**
- * Writes runtime artefacts for the given capability IR into `outputPath`.
- * May throw if the IR contains unsupported features.
- */
-export function exportCapability(capability: CapabilityIR, outputPath: string): Promise<void>;
-```
+## Adapter Contract (Normative)
 
-Guidelines:
+### Inputs
 
-- The adapter should validate the IR against any requirements of the target runtime (e.g. parameter types supported by OpenAI tools).
-- It should write files into the `outputPath` directory, creating subdirectories as needed (e.g. `openai`, `skill`, etc.).
-- It must not modify the passed IR.
+Each built-in export receives:
 
-## Adapter Discovery
+1. a fully validated package profile,
+2. a destination output directory,
+3. target-specific context (for example package base directory for MCP runtime config).
 
-To simplify usage, adapters may be discovered via a naming convention (e.g. files in a particular folder ending with `-importer.ts` or `-exporter.ts`) or via explicit registration in a configuration file.  The CLI should provide commands such as `myx list-adapters` to list available import and export adapters.
+Validation must complete before adapter execution begins.
 
-## Open Questions
+### Outputs
 
-- Should adapters support streaming conversion for large packages?
-- How should adapters handle partial or experimental support for features?  Should they emit warnings or errors?
-- What is the best way to support adapters in multiple languages (e.g. Python)?
+Each export returns:
+
+1. runtime artifacts written to output directory,
+2. zero or more structured issues describing lossy or incompatible semantics.
+
+Issue fields:
+
+- `level`
+- `category`
+- `tool` (optional)
+- `message`
+- `required_mismatch` (boolean)
+
+If any issue has `required_mismatch = true`, build must fail (RFC 0004 exit code `7`) after writing `loss-report.json`.
+
+## Built-In Target Requirements
+
+### `openai`
+
+Must emit deterministic:
+
+- `tools.json`
+- `instructions.md`
+
+If a tool requires subprocess execution semantics that cannot be preserved, emit required mismatch.
+
+### `skill`
+
+Must emit deterministic:
+
+- `SKILL.md`
+
+If tool semantics are not runnable/preservable in documentation-only output, emit required mismatch.
+
+### `mcp`
+
+Must emit deterministic:
+
+- `server.json`
+- `runtime-config.json`
+- `launch.json`
+- `run.sh`
+
+Generated launch behavior must use strict MCP framing mode (`--protocol mcp`) and route execution through the global runtime executor.
+
+## Import Adapters in MVP
+
+Importers are non-blocking for MVP ship. Existing importer crates may evolve independently, but importer completeness is not a release gate for v0.
+
+## Determinism and Safety Requirements
+
+All built-in adapters must:
+
+1. avoid mutating source package files,
+2. produce byte-stable output for unchanged inputs,
+3. surface semantic loss explicitly (no silent drops),
+4. preserve policy/runtime enforcement boundaries (no direct shell shortcuts outside executor rules).
+
+## Post-MVP Extension Boundary
+
+External adapter/plugin design is intentionally deferred. Any future plugin architecture must preserve the same loss-report and policy guarantees defined in MVP RFCs.
