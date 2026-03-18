@@ -76,4 +76,4 @@ Do not weaken policy enforcement without explicit maintainer approval and docume
 
 ## License
 
-By contributing, you agree your contributions are licensed under the repository license (`AGPL-3.0-only`).
+By contributing, you agree your contributions are licensed under the repository license (`Apache-2.0`).

@@ -54,4 +54,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development rules, required checks, a
 
 ## License
 
-This project is licensed under **GNU AGPL v3.0** (`AGPL-3.0-only`).
+This project is licensed under **Apache License 2.0** (`Apache-2.0`).
