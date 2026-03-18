@@ -27,6 +27,37 @@ fn find_missing(allowed: &[String], requested: &[String]) -> Vec<String> {
         .collect()
 }
 
+fn find_missing_exact(allowed: &[String], requested: &[String]) -> Vec<String> {
+    requested
+        .iter()
+        .filter(|r| !allowed.contains(r))
+        .cloned()
+        .collect()
+}
+
+fn contains_wildcard(values: &[String]) -> bool {
+    values.iter().any(|v| v == "*")
+}
+
+fn validate_subprocess_policy_allowlists(policy: &PolicyConfig) -> Result<()> {
+    if contains_wildcard(&policy.allow_subprocess_commands) {
+        anyhow::bail!(
+            "policy.allow_subprocess_commands must use exact allowlist entries; wildcard '*' is not allowed in MVP"
+        );
+    }
+    if contains_wildcard(&policy.allow_subprocess_cwds) {
+        anyhow::bail!(
+            "policy.allow_subprocess_cwds must use exact allowlist entries; wildcard '*' is not allowed in MVP"
+        );
+    }
+    if contains_wildcard(&policy.allow_subprocess_env) {
+        anyhow::bail!(
+            "policy.allow_subprocess_env must use exact allowlist entries; wildcard '*' is not allowed in MVP"
+        );
+    }
+    Ok(())
+}
+
 fn missing_permissions(policy: &PolicyConfig, permissions: &Permissions) -> Vec<String> {
     let mut missing = Vec::new();
 
@@ -51,13 +82,13 @@ fn missing_permissions(policy: &PolicyConfig, permissions: &Permissions) -> Vec<
     ) {
         missing.push(format!("subprocess_command:{item}"));
     }
-    for item in find_missing(
+    for item in find_missing_exact(
         &policy.allow_subprocess_cwds,
         &permissions.subprocess.allowed_cwds,
     ) {
         missing.push(format!("subprocess_cwd:{item}"));
     }
-    for item in find_missing(
+    for item in find_missing_exact(
         &policy.allow_subprocess_env,
         &permissions.subprocess.allowed_env,
     ) {
@@ -86,6 +117,8 @@ pub fn evaluate_install_policy(
     permissions: &Permissions,
     non_interactive: bool,
 ) -> Result<PolicyResult> {
+    validate_subprocess_policy_allowlists(policy)?;
+
     if matches!(policy.mode, PolicyMode::Permissive) {
         return Ok(PolicyResult {
             decision: Decision::Allow,
@@ -208,5 +241,19 @@ mod tests {
             evaluate_install_policy(&policy, &sample_permissions(), true).expect("policy eval");
         assert!(matches!(result.decision, Decision::Deny));
         assert!(result.reason.contains("non-interactive mode"));
+    }
+
+    #[test]
+    fn rejects_wildcard_subprocess_allowlist_entries() {
+        let policy = PolicyConfig {
+            mode: PolicyMode::ReviewRequired,
+            allow_subprocess_commands: vec!["*".to_string()],
+            ..PolicyConfig::default()
+        };
+        let err = evaluate_install_policy(&policy, &sample_permissions(), true)
+            .expect_err("expected wildcard subprocess policy rejection");
+        assert!(err
+            .to_string()
+            .contains("allow_subprocess_commands must use exact allowlist entries"));
     }
 }
