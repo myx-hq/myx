@@ -235,3 +235,75 @@ fn run_executes_subprocess_tool_and_returns_json() {
         .unwrap_or_default()
         .contains("hello"));
 }
+
+#[test]
+fn run_returns_policy_exit_code_for_network_denial() {
+    let tmp = TempDir::new().expect("tempdir");
+    let workspace = tmp.path().join("workspace");
+    let packages = tmp.path().join("packages");
+    std::fs::create_dir_all(&workspace).expect("create workspace");
+    std::fs::create_dir_all(&packages).expect("create packages");
+
+    let profile = json!({
+        "schema_version": "1",
+        "identity": {
+            "name": "networked",
+            "version": "0.1.0",
+            "publisher": "example",
+            "license": "Apache-2.0"
+        },
+        "metadata": {"description": "test", "homepage": "", "source": ""},
+        "capabilities": ["test"],
+        "instructions": {"system": "s", "usage": "u"},
+        "tools": [
+            {
+                "name": "http_ping",
+                "description": "http tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": { "query": {"type":"string"} },
+                    "required": ["query"]
+                },
+                "tool_class": "http_api",
+                "execution": {
+                    "kind": "http",
+                    "method": "GET",
+                    "url": "http://127.0.0.1:9999/status?q={{query}}",
+                    "headers": {},
+                    "timeout_ms": 1000
+                }
+            }
+        ],
+        "permissions": {
+            "network": ["example.com"],
+            "secrets": [],
+            "filesystem": {"read": [], "write": []},
+            "subprocess": {"allowed_commands": [], "allowed_cwds": [], "allowed_env": [], "max_timeout_ms": 10000}
+        },
+        "compatibility": {"runtimes": ["openai","mcp","skill"], "platforms": ["darwin"]}
+    });
+
+    let pkg_dir = write_package(&packages, "networked", "0.1.0", &profile);
+    write_workspace_config(&workspace, "networked", "0.1.0", &pkg_dir);
+
+    let output = run_myx(
+        &[
+            "run",
+            "networked.http_ping",
+            "--input",
+            "{\"query\":\"rust\"}",
+            "--json",
+        ],
+        &workspace,
+    );
+    assert!(!output.status.success(), "expected failure");
+    assert_eq!(output.status.code(), Some(6));
+
+    let stderr_payload: Value = serde_json::from_slice(&output.stderr).expect("parse stderr json");
+    assert_eq!(stderr_payload["ok"], false);
+    assert_eq!(stderr_payload["error"]["code"], 6);
+    assert!(stderr_payload["error"]["message"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("NetworkDenied"));
+}

@@ -36,6 +36,41 @@ pub struct ExecutionOutput {
     pub body: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeErrorCode {
+    ExecutionInvalid,
+    PolicyDenied,
+    NetworkDenied,
+    SubprocessDenied,
+    FilesystemDenied,
+    Timeout,
+    RuntimeFailure,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeError {
+    pub code: RuntimeErrorCode,
+    pub message: String,
+}
+
+impl RuntimeError {
+    fn new(code: RuntimeErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for RuntimeError {}
+
 pub fn load_runtime_config(path: &Path) -> Result<RuntimeConfig> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read runtime config '{}'", path.display()))?;
@@ -51,7 +86,8 @@ pub fn validate_runtime_config(config: &RuntimeConfig, base_dir: &Path) -> Resul
 
     for tool in &config.tools {
         validate_execution(&tool.execution)?;
-        validate_tool_permissions(tool, &config.permissions, base_dir)?;
+        validate_tool_permissions(tool, &config.permissions, base_dir)
+            .map_err(|e| anyhow!(e.to_string()))?;
     }
 
     Ok(())
@@ -62,12 +98,17 @@ pub fn execute_tool_call(
     base_dir: &Path,
     tool_name: &str,
     args: &Value,
-) -> Result<ExecutionOutput> {
+) -> std::result::Result<ExecutionOutput, RuntimeError> {
     let tool = config
         .tools
         .iter()
         .find(|t| t.name == tool_name)
-        .ok_or_else(|| anyhow!("tool '{}' not found in runtime config", tool_name))?;
+        .ok_or_else(|| {
+            RuntimeError::new(
+                RuntimeErrorCode::ExecutionInvalid,
+                format!("tool '{}' not found in runtime config", tool_name),
+            )
+        })?;
     execute_tool(tool, &config.permissions, base_dir, args)
 }
 
@@ -76,8 +117,9 @@ pub fn execute_tool(
     permissions: &Permissions,
     base_dir: &Path,
     args: &Value,
-) -> Result<ExecutionOutput> {
-    validate_execution(&tool.execution)?;
+) -> std::result::Result<ExecutionOutput, RuntimeError> {
+    validate_execution(&tool.execution)
+        .map_err(|e| RuntimeError::new(RuntimeErrorCode::ExecutionInvalid, e.to_string()))?;
     validate_tool_permissions(tool, permissions, base_dir)?;
 
     let empty = Map::new();
@@ -140,23 +182,28 @@ fn validate_tool_permissions(
     tool: &ToolDefinition,
     permissions: &Permissions,
     base_dir: &Path,
-) -> Result<()> {
+) -> std::result::Result<(), RuntimeError> {
     validate_subprocess_allowlists(permissions)?;
 
     match &tool.execution {
         ToolExecution::Http { url, .. } => {
-            let host = extract_host_from_template(url).with_context(|| {
-                format!(
-                    "tool '{}' has invalid http url template '{}'",
-                    tool.name, url
+            let host = extract_host_from_template(url).map_err(|e| {
+                RuntimeError::new(
+                    RuntimeErrorCode::ExecutionInvalid,
+                    format!(
+                        "tool '{}' has invalid http url template '{}': {}",
+                        tool.name, url, e
+                    ),
                 )
             })?;
             if !contains_or_wildcard(&permissions.network, &host) {
-                anyhow::bail!(
-                    "tool '{}' network host '{}' not allowed by permissions.network",
-                    tool.name,
-                    host
-                );
+                return Err(RuntimeError::new(
+                    RuntimeErrorCode::NetworkDenied,
+                    format!(
+                        "tool '{}' network host '{}' not allowed by permissions.network",
+                        tool.name, host
+                    ),
+                ));
             }
         }
         ToolExecution::Subprocess {
@@ -167,11 +214,13 @@ fn validate_tool_permissions(
             ..
         } => {
             if !contains_exact(&permissions.subprocess.allowed_commands, command) {
-                anyhow::bail!(
-                    "tool '{}' command '{}' is not in permissions.subprocess.allowed_commands",
-                    tool.name,
-                    command
-                );
+                return Err(RuntimeError::new(
+                    RuntimeErrorCode::SubprocessDenied,
+                    format!(
+                        "tool '{}' command '{}' is not in permissions.subprocess.allowed_commands",
+                        tool.name, command
+                    ),
+                ));
             }
 
             let resolved_cwd = resolve_cwd(base_dir, cwd.as_deref());
@@ -180,42 +229,53 @@ fn validate_tool_permissions(
                 &resolved_cwd,
                 &permissions.subprocess.allowed_cwds,
             ) {
-                anyhow::bail!(
-                    "tool '{}' cwd '{}' is not in permissions.subprocess.allowed_cwds",
-                    tool.name,
-                    resolved_cwd.display()
-                );
+                return Err(RuntimeError::new(
+                    RuntimeErrorCode::SubprocessDenied,
+                    format!(
+                        "tool '{}' cwd '{}' is not in permissions.subprocess.allowed_cwds",
+                        tool.name,
+                        resolved_cwd.display()
+                    ),
+                ));
             }
             if !cwd_within_filesystem_bounds(base_dir, &resolved_cwd, permissions) {
-                anyhow::bail!(
-                    "tool '{}' cwd '{}' is outside permissions.filesystem bounds",
-                    tool.name,
-                    resolved_cwd.display()
-                );
+                return Err(RuntimeError::new(
+                    RuntimeErrorCode::FilesystemDenied,
+                    format!(
+                        "tool '{}' cwd '{}' is outside permissions.filesystem bounds",
+                        tool.name,
+                        resolved_cwd.display()
+                    ),
+                ));
             }
 
             for env_key in env_passthrough {
                 if !contains_exact(&permissions.subprocess.allowed_env, env_key) {
-                    anyhow::bail!(
-                        "tool '{}' env '{}' is not in permissions.subprocess.allowed_env",
-                        tool.name,
-                        env_key
-                    );
+                    return Err(RuntimeError::new(
+                        RuntimeErrorCode::SubprocessDenied,
+                        format!(
+                            "tool '{}' env '{}' is not in permissions.subprocess.allowed_env",
+                            tool.name, env_key
+                        ),
+                    ));
                 }
             }
 
             let timeout = timeout_ms.unwrap_or_default();
-            let max_timeout = permissions
-                .subprocess
-                .max_timeout_ms
-                .ok_or_else(|| anyhow!("permissions.subprocess.max_timeout_ms is required"))?;
+            let max_timeout = permissions.subprocess.max_timeout_ms.ok_or_else(|| {
+                RuntimeError::new(
+                    RuntimeErrorCode::ExecutionInvalid,
+                    "permissions.subprocess.max_timeout_ms is required",
+                )
+            })?;
             if timeout > max_timeout {
-                anyhow::bail!(
-                    "tool '{}' timeout_ms {} exceeds permissions.subprocess.max_timeout_ms {}",
-                    tool.name,
-                    timeout,
-                    max_timeout
-                );
+                return Err(RuntimeError::new(
+                    RuntimeErrorCode::ExecutionInvalid,
+                    format!(
+                        "tool '{}' timeout_ms {} exceeds permissions.subprocess.max_timeout_ms {}",
+                        tool.name, timeout, max_timeout
+                    ),
+                ));
             }
         }
     }
@@ -230,15 +290,25 @@ fn execute_http(
     timeout_ms: Option<u64>,
     permissions: &Permissions,
     args: &Map<String, Value>,
-) -> Result<ExecutionOutput> {
+) -> std::result::Result<ExecutionOutput, RuntimeError> {
     let rendered_url = render_template(url_template, args);
-    let parsed = url::Url::parse(&rendered_url)
-        .with_context(|| format!("invalid url '{}'", rendered_url))?;
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| anyhow!("http url '{}' has no host", rendered_url))?;
+    let parsed = url::Url::parse(&rendered_url).map_err(|e| {
+        RuntimeError::new(
+            RuntimeErrorCode::ExecutionInvalid,
+            format!("invalid url '{}': {e}", rendered_url),
+        )
+    })?;
+    let host = parsed.host_str().ok_or_else(|| {
+        RuntimeError::new(
+            RuntimeErrorCode::ExecutionInvalid,
+            format!("http url '{}' has no host", rendered_url),
+        )
+    })?;
     if !contains_or_wildcard(&permissions.network, host) {
-        anyhow::bail!("network host '{}' not allowed by permissions.network", host);
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::NetworkDenied,
+            format!("network host '{}' not allowed by permissions.network", host),
+        ));
     }
 
     let timeout = Duration::from_millis(timeout_ms.unwrap_or(10_000));
@@ -256,7 +326,7 @@ fn execute_http(
     let method_upper = method.trim().to_ascii_uppercase();
     let request_body = Value::Object(args.clone()).to_string();
 
-    let mut response = match method_upper.as_str() {
+    let response = match method_upper.as_str() {
         "GET" => {
             let mut req = agent.get(&rendered_url);
             for (k, v) in &rendered_headers {
@@ -313,13 +383,19 @@ fn execute_http(
             req.send(&request_body)
         }
         _ => {
-            anyhow::bail!("unsupported http method '{}'", method);
+            return Err(RuntimeError::new(
+                RuntimeErrorCode::ExecutionInvalid,
+                format!("unsupported http method '{}'", method),
+            ));
         }
-    }
-    .with_context(|| {
-        format!(
-            "http execution failed for '{} {}'",
-            method_upper, rendered_url
+    };
+    let mut response = response.map_err(|e| {
+        RuntimeError::new(
+            RuntimeErrorCode::RuntimeFailure,
+            format!(
+                "http execution failed for '{} {}': {e}",
+                method_upper, rendered_url
+            ),
         )
     })?;
 
@@ -346,12 +422,15 @@ fn execute_subprocess(
     permissions: &Permissions,
     base_dir: &Path,
     args: &Map<String, Value>,
-) -> Result<ExecutionOutput> {
+) -> std::result::Result<ExecutionOutput, RuntimeError> {
     if !contains_exact(&permissions.subprocess.allowed_commands, command) {
-        anyhow::bail!(
-            "subprocess command '{}' not allowed by permissions.subprocess.allowed_commands",
-            command
-        );
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::SubprocessDenied,
+            format!(
+                "subprocess command '{}' not allowed by permissions.subprocess.allowed_commands",
+                command
+            ),
+        ));
     }
 
     let resolved_cwd = resolve_cwd(base_dir, cwd);
@@ -360,39 +439,56 @@ fn execute_subprocess(
         &resolved_cwd,
         &permissions.subprocess.allowed_cwds,
     ) {
-        anyhow::bail!(
-            "subprocess cwd '{}' not allowed by permissions.subprocess.allowed_cwds",
-            resolved_cwd.display()
-        );
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::SubprocessDenied,
+            format!(
+                "subprocess cwd '{}' not allowed by permissions.subprocess.allowed_cwds",
+                resolved_cwd.display()
+            ),
+        ));
     }
     if !cwd_within_filesystem_bounds(base_dir, &resolved_cwd, permissions) {
-        anyhow::bail!(
-            "subprocess cwd '{}' is outside permissions.filesystem bounds",
-            resolved_cwd.display()
-        );
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::FilesystemDenied,
+            format!(
+                "subprocess cwd '{}' is outside permissions.filesystem bounds",
+                resolved_cwd.display()
+            ),
+        ));
     }
 
     for env_key in env_passthrough {
         if !contains_exact(&permissions.subprocess.allowed_env, env_key) {
-            anyhow::bail!(
-                "subprocess env '{}' not allowed by permissions.subprocess.allowed_env",
-                env_key
-            );
+            return Err(RuntimeError::new(
+                RuntimeErrorCode::SubprocessDenied,
+                format!(
+                    "subprocess env '{}' not allowed by permissions.subprocess.allowed_env",
+                    env_key
+                ),
+            ));
         }
     }
 
-    let timeout_value =
-        timeout_ms.ok_or_else(|| anyhow!("subprocess execution requires timeout_ms"))?;
-    let max_timeout = permissions
-        .subprocess
-        .max_timeout_ms
-        .ok_or_else(|| anyhow!("permissions.subprocess.max_timeout_ms is required"))?;
+    let timeout_value = timeout_ms.ok_or_else(|| {
+        RuntimeError::new(
+            RuntimeErrorCode::ExecutionInvalid,
+            "subprocess execution requires timeout_ms",
+        )
+    })?;
+    let max_timeout = permissions.subprocess.max_timeout_ms.ok_or_else(|| {
+        RuntimeError::new(
+            RuntimeErrorCode::ExecutionInvalid,
+            "permissions.subprocess.max_timeout_ms is required",
+        )
+    })?;
     if timeout_value > max_timeout {
-        anyhow::bail!(
-            "subprocess timeout_ms {} exceeds permissions.subprocess.max_timeout_ms {}",
-            timeout_value,
-            max_timeout
-        );
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::ExecutionInvalid,
+            format!(
+                "subprocess timeout_ms {} exceeds permissions.subprocess.max_timeout_ms {}",
+                timeout_value, max_timeout
+            ),
+        ));
     }
 
     let rendered_args = args_template
@@ -417,11 +513,15 @@ fn execute_subprocess(
         }
     }
 
-    let mut child = process.spawn().with_context(|| {
-        format!(
-            "failed to spawn subprocess '{}' in cwd '{}'",
-            command,
-            resolved_cwd.display()
+    let mut child = process.spawn().map_err(|e| {
+        RuntimeError::new(
+            RuntimeErrorCode::RuntimeFailure,
+            format!(
+                "failed to spawn subprocess '{}' in cwd '{}': {}",
+                command,
+                resolved_cwd.display(),
+                e
+            ),
         )
     })?;
 
@@ -429,10 +529,12 @@ fn execute_subprocess(
     let started = Instant::now();
 
     loop {
-        match child
-            .try_wait()
-            .context("failed polling subprocess status")?
-        {
+        match child.try_wait().map_err(|e| {
+            RuntimeError::new(
+                RuntimeErrorCode::RuntimeFailure,
+                format!("failed polling subprocess status: {e}"),
+            )
+        })? {
             Some(status) => {
                 let (stdout, stderr) = read_child_pipes(&mut child)?;
                 return Ok(ExecutionOutput {
@@ -449,11 +551,13 @@ fn execute_subprocess(
                     let _ = child.kill();
                     let _ = child.wait();
                     let _ = read_child_pipes(&mut child);
-                    anyhow::bail!(
-                        "subprocess timed out after {}ms for command '{}'",
-                        timeout_value,
-                        command
-                    );
+                    return Err(RuntimeError::new(
+                        RuntimeErrorCode::Timeout,
+                        format!(
+                            "subprocess timed out after {}ms for command '{}'",
+                            timeout_value, command
+                        ),
+                    ));
                 }
                 std::thread::sleep(Duration::from_millis(10));
             }
@@ -461,17 +565,25 @@ fn execute_subprocess(
     }
 }
 
-fn read_child_pipes(child: &mut Child) -> Result<(String, String)> {
+fn read_child_pipes(child: &mut Child) -> std::result::Result<(String, String), RuntimeError> {
     let mut stdout = String::new();
     if let Some(mut out) = child.stdout.take() {
-        out.read_to_string(&mut stdout)
-            .context("failed reading subprocess stdout")?;
+        out.read_to_string(&mut stdout).map_err(|e| {
+            RuntimeError::new(
+                RuntimeErrorCode::RuntimeFailure,
+                format!("failed reading subprocess stdout: {e}"),
+            )
+        })?;
     }
 
     let mut stderr = String::new();
     if let Some(mut err) = child.stderr.take() {
-        err.read_to_string(&mut stderr)
-            .context("failed reading subprocess stderr")?;
+        err.read_to_string(&mut stderr).map_err(|e| {
+            RuntimeError::new(
+                RuntimeErrorCode::RuntimeFailure,
+                format!("failed reading subprocess stderr: {e}"),
+            )
+        })?;
     }
 
     Ok((stdout, stderr))
@@ -502,21 +614,26 @@ fn contains_wildcard(allowed: &[String]) -> bool {
     allowed.iter().any(|a| a == "*")
 }
 
-fn validate_subprocess_allowlists(permissions: &Permissions) -> Result<()> {
+fn validate_subprocess_allowlists(
+    permissions: &Permissions,
+) -> std::result::Result<(), RuntimeError> {
     if contains_wildcard(&permissions.subprocess.allowed_commands) {
-        anyhow::bail!(
-            "permissions.subprocess.allowed_commands must use exact entries; wildcard '*' is not allowed in MVP"
-        );
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::PolicyDenied,
+            "permissions.subprocess.allowed_commands must use exact entries; wildcard '*' is not allowed in MVP",
+        ));
     }
     if contains_wildcard(&permissions.subprocess.allowed_cwds) {
-        anyhow::bail!(
-            "permissions.subprocess.allowed_cwds must use exact entries; wildcard '*' is not allowed in MVP"
-        );
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::PolicyDenied,
+            "permissions.subprocess.allowed_cwds must use exact entries; wildcard '*' is not allowed in MVP",
+        ));
     }
     if contains_wildcard(&permissions.subprocess.allowed_env) {
-        anyhow::bail!(
-            "permissions.subprocess.allowed_env must use exact entries; wildcard '*' is not allowed in MVP"
-        );
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::PolicyDenied,
+            "permissions.subprocess.allowed_env must use exact entries; wildcard '*' is not allowed in MVP",
+        ));
     }
     Ok(())
 }
@@ -675,7 +792,7 @@ mod tests {
             &serde_json::json!({"message":"hello"}),
         )
         .expect_err("expected allowlist failure");
-        assert!(err.to_string().contains("allowed_commands"));
+        assert_eq!(err.code, RuntimeErrorCode::SubprocessDenied);
     }
 
     #[test]
@@ -692,7 +809,7 @@ mod tests {
             &serde_json::json!({"message":"hello"}),
         )
         .expect_err("expected filesystem bounds failure");
-        assert!(err.to_string().contains("filesystem bounds"));
+        assert_eq!(err.code, RuntimeErrorCode::FilesystemDenied);
     }
 
     #[test]
@@ -708,7 +825,7 @@ mod tests {
             &serde_json::json!({"message":"hello"}),
         )
         .expect_err("expected wildcard deny");
-        assert!(err.to_string().contains("exact entries"));
+        assert_eq!(err.code, RuntimeErrorCode::PolicyDenied);
     }
 
     #[test]
@@ -784,6 +901,6 @@ mod tests {
             &serde_json::json!({"query":"myx"}),
         )
         .expect_err("expected host deny");
-        assert!(err.to_string().contains("not allowed"));
+        assert_eq!(err.code, RuntimeErrorCode::NetworkDenied);
     }
 }

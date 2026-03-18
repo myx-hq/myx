@@ -80,7 +80,8 @@ fn run() -> Result<()> {
         } else {
             json!({})
         };
-        let result = execute_tool_call(&config, &base_dir, &tool_name, &args)?;
+        let result = execute_tool_call(&config, &base_dir, &tool_name, &args)
+            .map_err(|e| anyhow!(e.to_string()))?;
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({
