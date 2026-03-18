@@ -16,8 +16,8 @@ enum ProtocolMode {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "myx-mcp-wrapper")]
-#[command(about = "myx deterministic MCP wrapper runtime")]
+#[command(name = "myx-mcp-runner")]
+#[command(about = "myx deterministic MCP runtime bridge")]
 struct Cli {
     #[arg(long, value_name = "PATH")]
     config: PathBuf,

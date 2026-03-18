@@ -75,6 +75,9 @@ pub fn command_build(
         );
     } else {
         println!("built target '{}' to {}", target, out_dir.display());
+        if target == "mcp" {
+            println!("run: {}", out_dir.join("run.sh").display());
+        }
         if !loss.is_empty() {
             println!(
                 "loss report: {}",

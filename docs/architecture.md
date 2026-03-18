@@ -25,7 +25,7 @@ myx MVP is a Rust-core system centered on a canonical capability profile and det
 
 5. **Execution Surface**
 - Global runtime executor enforces declarative `http`/`subprocess` actions.
-- MCP output uses generated wrapper artifacts with strict protocol mode (`--protocol mcp`).
+- MCP output uses generated launch artifacts (`run.sh` entrypoint) with strict protocol mode (`--protocol mcp`).
 
 ## Data Flow
 
@@ -35,7 +35,7 @@ source (path/static index)
   -> policy decision
   -> store install + lockfile write
   -> build target artifacts
-  -> runtime execution via executor/wrapper
+  -> runtime execution via executor/bridge
 ```
 
 ## MVP Boundary

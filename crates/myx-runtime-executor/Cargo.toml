@@ -6,8 +6,8 @@ license.workspace = true
 repository.workspace = true
 
 [[bin]]
-name = "myx-mcp-wrapper"
-path = "src/bin/myx-mcp-wrapper.rs"
+name = "myx-mcp-runner"
+path = "src/bin/myx-mcp-runner.rs"
 
 [dependencies]
 anyhow.workspace = true

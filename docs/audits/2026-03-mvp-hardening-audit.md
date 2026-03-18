@@ -14,7 +14,7 @@ Track and execute hardening tasks to ensure:
 
 1. `P0` Verify index digest over full package payload (not profile-only).
 2. `P0` Make store install non-destructive and atomic.
-3. `P1` Fix MCP wrapper cwd semantics for subprocess tools.
+3. `P1` Fix MCP runtime bridge cwd semantics for subprocess tools.
 4. `P1` Align loss-report schema with emitted payload.
 5. `P1` Strengthen capability profile schema to match runtime validation.
 6. `P2` Add strict MCP protocol compatibility mode.
