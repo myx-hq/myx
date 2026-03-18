@@ -16,10 +16,19 @@ require_pattern() {
   local path="$1"
   local pattern="$2"
   local message="$3"
-  if ! rg -q "$pattern" "$path"; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -q "$pattern" "$path"; then
+      return
+    fi
+  elif grep -Eq "$pattern" "$path"; then
+    return
+  fi
+  if [[ -x "$(command -v rg 2>/dev/null)" || -x "$(command -v grep 2>/dev/null)" ]]; then
     echo "$message" >&2
     exit 1
   fi
+  echo "missing required search tool: neither rg nor grep is available" >&2
+  exit 1
 }
 
 require_file "rfcs/0004-cli-contract.md"

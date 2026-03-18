@@ -14,6 +14,8 @@ pub struct RuntimeConfig {
     pub schema_version: u32,
     pub identity: Identity,
     #[serde(default)]
+    pub base_dir: Option<String>,
+    #[serde(default)]
     pub permissions: Permissions,
     #[serde(default)]
     pub tools: Vec<ToolDefinition>,
