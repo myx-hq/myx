@@ -1,6 +1,6 @@
 # RFC 0003: Built-In Adapter Contract (MVP)
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Summary
 

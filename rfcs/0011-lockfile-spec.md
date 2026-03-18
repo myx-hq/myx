@@ -1,6 +1,6 @@
 # RFC 0011: Lockfile Spec
 
-*Status: Draft*
+*Status: Accepted*
 
 ## File Name
 

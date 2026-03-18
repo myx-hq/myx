@@ -1,6 +1,6 @@
 # RFC 0001: Capability IR
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Summary
 

@@ -1,6 +1,6 @@
 # RFC 0004: MVP CLI Contract (Rust Core)
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Summary
 

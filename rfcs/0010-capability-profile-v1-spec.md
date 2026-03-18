@@ -1,6 +1,6 @@
 # RFC 0010: Capability Profile v1 Spec
 
-*Status: Draft*
+*Status: Accepted*
 
 ## Purpose
 
