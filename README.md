@@ -56,6 +56,17 @@ cargo run -p myx-cli -- build --target mcp
 ./.myx/mcp/run.sh --healthcheck
 ```
 
+## Install (Homebrew)
+
+After tagged releases are published:
+
+```bash
+brew tap myx-hq/myx
+brew install myx
+```
+
+See `docs/release.md` for the release pipeline and Homebrew formula handoff process.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development rules, required checks, and PR expectations.
